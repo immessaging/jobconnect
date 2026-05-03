@@ -1,0 +1,88 @@
+.payment-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85); z-index: 10001;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.payment-modal {
+  background: white; border-radius: 15px; padding: 30px;
+  max-width: 500px; width: 100%; position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.payment-modal h2 { text-align: center; color: #0a1628; margin-bottom: 20px; }
+
+.amount-display {
+  text-align: center; background: #f0f7ff; padding: 15px;
+  border-radius: 10px; margin-bottom: 20px;
+}
+.amount-display span { color: #666; font-size: 13px; }
+.amount-display h3 { color: #28a745; font-size: 28px; margin: 5px 0 0; }
+
+.payment-methods {
+  display: flex; gap: 10px; margin-bottom: 20px;
+}
+.method-btn {
+  flex: 1; padding: 12px; border: 2px solid #e0e0e0;
+  border-radius: 8px; background: white; cursor: pointer;
+  font-size: 13px; font-weight: 600; transition: all 0.2s;
+}
+.method-btn.active { border-color: #d4a843; background: #fffef5; color: #0a1628; }
+.method-btn:hover { border-color: #d4a843; }
+
+.payment-form { margin-bottom: 20px; }
+.payment-form .form-group { margin-bottom: 12px; }
+.payment-form label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #555; }
+.payment-form input, .payment-form select {
+  width: 100%; padding: 10px 12px; border: 2px solid #e0e0e0;
+  border-radius: 6px; font-size: 14px;
+}
+.payment-form input:focus, .payment-form select:focus {
+  outline: none; border-color: #d4a843;
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.ussd-info { background: #fff3cd; padding: 10px; border-radius: 6px; font-size: 13px; color: #856404; }
+
+.btn-pay-now {
+  width: 100%; padding: 15px; background: #28a745; color: white;
+  border: none; border-radius: 8px; font-size: 16px; font-weight: bold;
+  cursor: pointer; transition: all 0.3s;
+}
+.btn-pay-now:hover:not(:disabled) { background: #218838; }
+.btn-pay-now:disabled { background: #ccc; cursor: not-allowed; }
+
+.secure-note { text-align: center; font-size: 11px; color: #999; margin-top: 10px; }
+
+.payment-success { text-align: center; padding: 20px; }
+.success-icon { font-size: 60px; margin-bottom: 15px; }
+.payment-success h2 { color: #28a745; }
+.escrow-info { background: #d4edda; padding: 8px; border-radius: 6px; color: #155724; font-size: 13px; }
+.org-reveal { color: #d4a843; font-weight: bold; margin-top: 15px; }
+/* USSD Bank Sections */
+.ussd-bank-section {
+  background: #f9fafb;
+  padding: 12px 15px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  border-left: 4px solid #d4a843;
+}
+
+.ussd-bank-section h6 {
+  color: #0a1628;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.ussd-code-box {
+  background: #0a1628;
+  color: #d4a843;
+  padding: 12px 15px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  text-align: center;
+  letter-spacing: 1px;
+  font-family: 'Courier New', monospace;
+  cursor: pointer;
+  user-select: all;
+}
