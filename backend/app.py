@@ -259,6 +259,67 @@ def contact_form():
         return jsonify({"success": False, "error": str(e)}), 400
 
 # ============================================
+# SUBMIT VERIFICATION DOCUMENTS
+# ============================================
+@app.route('/api/verify/submit', methods=['POST'])
+def submit_verification():
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        user_type = data.get('user_type', 'job_seeker')
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Update user with verification details
+        cur.execute("""
+            UPDATE users SET 
+                verification_status = 'pending',
+                nin = %s,
+                bvn = %s,
+                bank_name = %s,
+                account_number = %s,
+                address = COALESCE(%s, address),
+                guarantor_name = %s,
+                guarantor_phone = %s,
+                guarantor_address = %s,
+                next_of_kin_name = %s,
+                next_of_kin_phone = %s,
+                next_of_kin_address = %s,
+                emergency_contact_name = %s,
+                emergency_contact_phone = %s,
+                social_media_1 = %s,
+                social_media_2 = %s,
+                updated_at = NOW()
+            WHERE id = %s
+        """, (
+            data.get('nin'), data.get('bvn'), data.get('bank_name'),
+            data.get('account_number'), data.get('address'),
+            data.get('guarantor_name'), data.get('guarantor_phone'),
+            data.get('guarantor_address'), data.get('next_of_kin_name'),
+            data.get('next_of_kin_phone'), data.get('next_of_kin_address'),
+            data.get('emergency_contact_name'), data.get('emergency_contact_phone'),
+            data.get('social_media_1'), data.get('social_media_2'),
+            user_id
+        ))
+        
+        # Log activity
+        cur.execute("""
+            INSERT INTO activity_logs (user_id, user_email, activity_type, 
+                activity_description, module, severity, ip_address)
+            VALUES (%s, %s, 'verification_submitted', %s, 'verification', 'info', %s)
+        """, (user_id, data.get('email'), 
+              f'{user_type} submitted verification documents', request.remote_addr))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Verification documents submitted successfully"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# ============================================
 # GPS LOCATION TRACKING
 # ============================================
 @app.route('/api/gps/track', methods=['POST'])
