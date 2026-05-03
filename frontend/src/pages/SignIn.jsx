@@ -80,10 +80,7 @@ function SignIn() {
           <h2>Welcome Back!</h2>
           <p>Sign in to your account to continue your job search journey with verified opportunities.</p>
           <div style={{marginTop: '20px', fontSize: '13px', opacity: '0.8'}}>
-            <p><strong>Test Accounts:</strong></p>
-            <p>Admin: admin@jobconnect.com / admin123</p>
-            <p>Agent: agent1@example.com / password123</p>
-            <p>Seeker: seeker1@example.com / password123</p>
+            
           </div>
         </div>
 

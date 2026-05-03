@@ -26,6 +26,20 @@ function About() {
             <li><strong>Accountability:</strong> Full audit trail on all transactions</li>
           </ul>
         </section>
+        <section>
+          <h2>Built With Trusted Technology</h2>
+          <div className="built-with-grid-about">
+            <div className="tech-item"><span>⚛️</span> <strong>React + Vite</strong> - Modern frontend framework</div>
+            <div className="tech-item"><span>🐍</span> <strong>Flask (Python)</strong> - Reliable backend API</div>
+            <div className="tech-item"><span>🗄️</span> <strong>PostgreSQL + Supabase</strong> - Secure database</div>
+            <div className="tech-item"><span>▲</span> <strong>Vercel + Render</strong> - Cloud hosting (free tier)</div>
+            <div className="tech-item"><span>🏦</span> <strong>Access Bank</strong> - Escrow payment processing</div>
+            <div className="tech-item"><span>🔓</span> <strong>Open Source</strong> - Transparent codebase on GitHub</div>
+          </div>
+          <p style={{marginTop:'15px'}}>
+            View our code: <a href="https://github.com/immessaging/jobconnect" target="_blank" rel="noreferrer" style={{color:'#d4a843'}}>github.com/immessaging/jobconnect</a>
+          </p>
+        </section>
       </div>
     </div>
   );

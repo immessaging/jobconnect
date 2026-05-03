@@ -5,7 +5,6 @@ import './Home.css';
 
 // Import images
 import adJobcon from '../assets/images/ad_jobcon.png';
-import stepsImg from '../assets/images/steps.png';
 import secureImg from '../assets/images/secure.png';
 import trustImg from '../assets/images/trust.png';
 import transparentImg from '../assets/images/transparent.png';
@@ -31,7 +30,6 @@ function Home() {
     getJobs().then(res => setStats({ jobs: res.data.count })).catch(console.log);
     getTestimonials().then(res => setTestimonials(res.data.testimonials || [])).catch(console.log);
     
-    // Auto-slide every 5 seconds
     const interval = setInterval(() => {
       setCurrentSlide(prev => (prev + 1) % slides.length);
     }, 5000);
@@ -67,7 +65,6 @@ function Home() {
           </div>
         </div>
 
-        {/* Slide Indicators */}
         <div className="slide-indicators">
           {slides.map((_, index) => (
             <button
@@ -78,11 +75,12 @@ function Home() {
           ))}
         </div>
 
+        {/* HONEST Stats - No fake numbers */}
         <div className="hero-stats">
-          <div className="stat-card"><span className="stat-icon">💼</span><h3>{stats.jobs}+</h3><p>Active Jobs</p></div>
+          <div className="stat-card"><span className="stat-icon">💼</span><h3>{stats.jobs}</h3><p>Active Jobs</p></div>
           <div className="stat-card"><span className="stat-icon">✓</span><h3>100%</h3><p>Verified</p></div>
           <div className="stat-card"><span className="stat-icon">🔒</span><h3>Secure</h3><p>Escrow Protection</p></div>
-          <div className="stat-card"><span className="stat-icon">👥</span><h3>5000+</h3><p>Users</p></div>
+          <div className="stat-card"><span className="stat-icon">🛡️</span><h3>Trusted</h3><p>Transparent Process</p></div>
         </div>
       </section>
 
@@ -103,60 +101,43 @@ function Home() {
         </div>
       </section>
 
-      {/* Why Choose Us - with images */}
+      {/* Why Choose Us */}
       <section className="section features">
         <h2 className="section-title">Why <span className="gold-text">JobConnect?</span></h2>
         <p className="section-subtitle">Nigeria's most trusted job connection platform</p>
         <div className="feature-grid">
-          <div className="feature-card">
-            <img src={secureImg} alt="Verified Jobs" className="feature-card-img" />
-            <h3>100% Verified Jobs</h3>
-            <p>Every job posting is verified by our team before it goes live. No fake jobs, no scams.</p>
-          </div>
-          <div className="feature-card">
-            <img src={highSecurityImg} alt="Secure Escrow" className="feature-card-img" />
-            <h3>Secure Escrow</h3>
-            <p>Your commission is held safely until you confirm you've gotten the job at the agreed salary.</p>
-          </div>
-          <div className="feature-card">
-            <img src={trustImg} alt="Trusted Agents" className="feature-card-img" />
-            <h3>Trusted Agents</h3>
-            <p>Agents verified with NIN, BVN, face recognition, fingerprint, and guarantor details.</p>
-          </div>
-          <div className="feature-card">
-            <img src={commissionImg} alt="Quality Jobs" className="feature-card-img" />
-            <h3>Quality Jobs</h3>
-            <p>Only genuine, well-paying positions from verified organizations across Nigeria.</p>
-          </div>
-          <div className="feature-card">
-            <img src={transparentImg} alt="Transparent Fees" className="feature-card-img" />
-            <h3>Transparent Fees</h3>
-            <p>5-35% commission. 83% to agent, 17% platform fee. No hidden charges.</p>
-          </div>
-          <div className="feature-card">
-            <img src={veriProcessImg} alt="Fast Process" className="feature-card-img" />
-            <h3>Fast Process</h3>
-            <p>Apply, sign agreement, and pay commission in minutes. Start your new job journey today!</p>
-          </div>
+          <div className="feature-card"><img src={secureImg} alt="Verified Jobs" className="feature-card-img" /><h3>100% Verified Jobs</h3><p>Every job posting is verified by our team before it goes live. No fake jobs, no scams.</p></div>
+          <div className="feature-card"><img src={highSecurityImg} alt="Secure Escrow" className="feature-card-img" /><h3>Secure Escrow</h3><p>Your commission is held safely until you confirm you've gotten the job at the agreed salary.</p></div>
+          <div className="feature-card"><img src={trustImg} alt="Trusted Agents" className="feature-card-img" /><h3>Trusted Agents</h3><p>Agents verified with NIN, BVN, face recognition, fingerprint, and guarantor details.</p></div>
+          <div className="feature-card"><img src={commissionImg} alt="Quality Jobs" className="feature-card-img" /><h3>Quality Jobs</h3><p>Only genuine, well-paying positions from verified organizations across Nigeria.</p></div>
+          <div className="feature-card"><img src={transparentImg} alt="Transparent Fees" className="feature-card-img" /><h3>Transparent Fees</h3><p>5-35% commission. 83% to agent, 17% platform fee. No hidden charges.</p></div>
+          <div className="feature-card"><img src={veriProcessImg} alt="Fast Process" className="feature-card-img" /><h3>Fast Process</h3><p>Apply, sign agreement, and pay commission in minutes. Start your new job journey today!</p></div>
         </div>
       </section>
 
       {/* Customer Care Section */}
       <section className="section customer-care">
         <div className="customer-care-grid">
-          <div className="customer-care-image">
-            <img src={goodCustomercareImg} alt="Customer Care" />
-          </div>
+          <div className="customer-care-image"><img src={goodCustomercareImg} alt="Customer Care" /></div>
           <div className="customer-care-content">
             <h2 className="section-title">Excellent <span className="gold-text">Customer Support</span></h2>
             <p>Our dedicated team is available to help you through every step of your job search journey.</p>
-            <ul>
-              <li>📞 24/7 Phone Support</li>
-              <li>💬 Live Chat Assistance</li>
-              <li>📧 Email Response within 2 hours</li>
-              <li>⚖️ Dispute Resolution Team</li>
-            </ul>
+            <ul><li>📞 24/7 Phone Support</li><li>💬 Live Chat Assistance</li><li>📧 Email Response within 2 hours</li><li>⚖️ Dispute Resolution Team</li></ul>
           </div>
+        </div>
+      </section>
+
+      {/* Built With Section */}
+      <section className="section built-with">
+        <h2 className="section-title">Built With <span className="gold-text">Trusted Technology</span></h2>
+        <p className="section-subtitle">Open-source tools powering our transparent platform</p>
+        <div className="built-with-grid">
+          <div className="tech-card"><span className="tech-icon">⚛️</span><h4>React + Vite</h4><p>Modern frontend</p></div>
+          <div className="tech-card"><span className="tech-icon">🐍</span><h4>Flask (Python)</h4><p>Backend API</p></div>
+          <div className="tech-card"><span className="tech-icon">🗄️</span><h4>PostgreSQL</h4><p>Supabase Database</p></div>
+          <div className="tech-card"><span className="tech-icon">▲</span><h4>Vercel + Render</h4><p>Cloud Hosting</p></div>
+          <div className="tech-card"><span className="tech-icon">🏦</span><h4>Access Bank</h4><p>Escrow Payments</p></div>
+          <div className="tech-card"><span className="tech-icon">🔓</span><h4>Open Source</h4><p>Transparent Code</p></div>
         </div>
       </section>
 
@@ -169,13 +150,8 @@ function Home() {
             testimonials.map(testimonial => (
               <div key={testimonial.id} className="testimonial-card">
                 <div className="testimonial-header">
-                  <div className="testimonial-avatar">
-                    {testimonial.name.charAt(0)}{testimonial.name.split(' ')[1]?.charAt(0) || ''}
-                  </div>
-                  <div>
-                    <h4>{testimonial.name}</h4>
-                    <p className="testimonial-role">{testimonial.role} at {testimonial.company}</p>
-                  </div>
+                  <div className="testimonial-avatar">{testimonial.name.charAt(0)}{testimonial.name.split(' ')[1]?.charAt(0) || ''}</div>
+                  <div><h4>{testimonial.name}</h4><p className="testimonial-role">{testimonial.role} at {testimonial.company}</p></div>
                   <div className="testimonial-rating">{'⭐'.repeat(testimonial.rating)}</div>
                 </div>
                 <p className="testimonial-text">"{testimonial.text}"</p>
@@ -192,7 +168,7 @@ function Home() {
       <section className="section cta-section">
         <div className="cta-content">
           <h2>Ready to Find Your <span className="gold-text">Dream Job?</span></h2>
-          <p>Join thousands of Nigerians who have found verified jobs through trusted agents</p>
+          <p>Join verified job seekers who trust our transparent process</p>
           <Link to="/signup" className="btn btn-red">Get Started Now - It's Free</Link>
         </div>
       </section>
