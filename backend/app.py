@@ -381,6 +381,9 @@ def contact_form():
 # ============================================
 # SUBMIT VERIFICATION DOCUMENTS (Per User Type)
 # ============================================
+# ============================================
+# SUBMIT VERIFICATION (Per User Type)
+# ============================================
 @app.route('/api/verify/submit', methods=['POST'])
 def submit_verification():
     try:
@@ -393,6 +396,7 @@ def submit_verification():
         cur = conn.cursor()
         
         if user_type == 'job_seeker':
+            # Job Seeker: 11 fields + user_id = 12 placeholders
             cur.execute("""
                 UPDATE users SET 
                     verification_status = 'pending',
@@ -417,23 +421,8 @@ def submit_verification():
                 data.get('social_media_2'), user_id
             ))
             
-            # Create/update job_seeker_profiles
-            cur.execute("SELECT id FROM job_seeker_profiles WHERE user_id = %s", (user_id,))
-            if cur.fetchone():
-                cur.execute("""
-                    UPDATE job_seeker_profiles SET full_name = COALESCE(%s, full_name),
-                    nin = COALESCE(%s, nin), date_of_birth = COALESCE(%s::date, date_of_birth),
-                    address = COALESCE(%s, address), verification_status = 'pending'
-                    WHERE user_id = %s
-                """, (data.get('full_name'), data.get('nin'), data.get('date_of_birth'), data.get('address'), user_id))
-            else:
-                cur.execute("""
-                    INSERT INTO job_seeker_profiles (user_id, full_name, nin, date_of_birth, address, verification_status)
-                    VALUES (%s, %s, %s, %s, %s, 'pending')
-                """, (user_id, data.get('full_name', email), data.get('nin', 'PENDING'),
-                      data.get('date_of_birth', '2000-01-01'), data.get('address', 'Address TBD')))
-            
         elif user_type in ('agent', 'staff'):
+            # Agent/Staff: 19 fields + user_id = 20 placeholders
             cur.execute("""
                 UPDATE users SET 
                     verification_status = 'pending',
@@ -467,28 +456,6 @@ def submit_verification():
                 data.get('emergency_contact_name'), data.get('emergency_contact_phone'),
                 data.get('social_media_1'), data.get('social_media_2'), user_id
             ))
-            
-            # Create/update agent_profiles
-            if user_type == 'agent':
-                cur.execute("SELECT id FROM agent_profiles WHERE user_id = %s", (user_id,))
-                if cur.fetchone():
-                    cur.execute("""
-                        UPDATE agent_profiles SET full_name = COALESCE(%s, full_name),
-                        nin = COALESCE(%s, nin), bvn = COALESCE(%s, bvn),
-                        date_of_birth = COALESCE(%s::date, date_of_birth), address = COALESCE(%s, address),
-                        guarantor_name = COALESCE(%s, guarantor_name), guarantor_phone = COALESCE(%s, guarantor_phone),
-                        verification_status = 'pending' WHERE user_id = %s
-                    """, (data.get('full_name'), data.get('nin'), data.get('bvn'),
-                          data.get('date_of_birth'), data.get('address'),
-                          data.get('guarantor_name'), data.get('guarantor_phone'), user_id))
-                else:
-                    cur.execute("""
-                        INSERT INTO agent_profiles (user_id, full_name, nin, bvn, date_of_birth, address,
-                        guarantor_name, guarantor_phone, verification_status)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending')
-                    """, (user_id, data.get('full_name', email), data.get('nin', 'PENDING'),
-                          data.get('bvn', 'PENDING'), data.get('date_of_birth', '2000-01-01'),
-                          data.get('address', 'Address TBD'), data.get('guarantor_name', ''), data.get('guarantor_phone', '')))
         
         # Log activity
         cur.execute("""
@@ -497,17 +464,15 @@ def submit_verification():
             VALUES (%s, %s, 'verification_submitted', %s, 'verification', 'info', %s)
         """, (user_id, email, f'{user_type} submitted verification', request.remote_addr))
         
-        # Send verification email
+        # Send email notification
         try:
             sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-            from_email = Email(FROM_EMAIL, FROM_NAME)
-            to_email = To(email)
-            content = Content("text/html", f'''
-                <h2>Verification Submitted</h2>
-                <p>Dear {data.get('full_name', 'User')},</p>
-                <p>Your documents have been received. Review takes 24-48 hours.</p>
-            ''')
-            mail = Mail(from_email, to_email, "Verification Submitted - JobConnect Nigeria", content)
+            mail = Mail(
+                Email(FROM_EMAIL, FROM_NAME),
+                To(email),
+                "Verification Submitted - JobConnect Nigeria",
+                Content("text/html", f'<h2>Verification Submitted</h2><p>Dear {data.get("full_name", "User")},</p><p>Your documents have been received. Review takes 24-48 hours.</p>')
+            )
             sg.client.mail.send.post(request_body=mail.get())
         except:
             pass
