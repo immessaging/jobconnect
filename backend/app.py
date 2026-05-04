@@ -379,7 +379,7 @@ def contact_form():
         return jsonify({"success": False, "error": str(e)}), 400
 
 # ============================================
-# SUBMIT VERIFICATION DOCUMENTS (All User Types)
+# SUBMIT VERIFICATION DOCUMENTS (Per User Type)
 # ============================================
 @app.route('/api/verify/submit', methods=['POST'])
 def submit_verification():
@@ -392,102 +392,110 @@ def submit_verification():
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Update users table with common fields
-        cur.execute("""
-            UPDATE users SET 
-                verification_status = 'pending',
-                full_name = COALESCE(%s, full_name),
-                date_of_birth = COALESCE(%s::date, date_of_birth),
-                address = COALESCE(%s, address),
-                city = COALESCE(%s, city),
-                state = COALESCE(%s, state),
-                nin = COALESCE(%s, nin),
-                bvn = COALESCE(%s, bvn),
-                bank_name = COALESCE(%s, bank_name),
-                account_number = COALESCE(%s, account_number),
-                account_name = COALESCE(%s, account_name),
-                guarantor_name = COALESCE(%s, guarantor_name),
-                guarantor_phone = COALESCE(%s, guarantor_phone),
-                guarantor_address = COALESCE(%s, guarantor_address),
-                next_of_kin_name = COALESCE(%s, next_of_kin_name),
-                next_of_kin_phone = COALESCE(%s, next_of_kin_phone),
-                next_of_kin_address = COALESCE(%s, next_of_kin_address),
-                emergency_contact_name = COALESCE(%s, emergency_contact_name),
-                emergency_contact_phone = COALESCE(%s, emergency_contact_phone),
-                social_media_1 = COALESCE(%s, social_media_1),
-                social_media_2 = COALESCE(%s, social_media_2),
-                updated_at = NOW()
-            WHERE id = %s
-        """, (
-            data.get('full_name'), data.get('date_of_birth'), data.get('address'),
-            data.get('nin'), data.get('bvn'), data.get('bank_name'),
-            data.get('account_number'), data.get('guarantor_name'),
-            data.get('guarantor_phone'), data.get('guarantor_address'),
-            data.get('next_of_kin_name'), data.get('next_of_kin_phone'),
-            data.get('next_of_kin_address'), data.get('emergency_contact_name'),
-            data.get('emergency_contact_phone'), data.get('social_media_1'),
-            data.get('social_media_2'), user_id
-        ))
-        
-        # Handle profile tables based on user type
         if user_type == 'job_seeker':
+            cur.execute("""
+                UPDATE users SET 
+                    verification_status = 'pending',
+                    full_name = COALESCE(%s, full_name),
+                    date_of_birth = COALESCE(%s::date, date_of_birth),
+                    address = COALESCE(%s, address),
+                    nin = COALESCE(%s, nin),
+                    next_of_kin_name = COALESCE(%s, next_of_kin_name),
+                    next_of_kin_phone = COALESCE(%s, next_of_kin_phone),
+                    next_of_kin_address = COALESCE(%s, next_of_kin_address),
+                    emergency_contact_name = COALESCE(%s, emergency_contact_name),
+                    emergency_contact_phone = COALESCE(%s, emergency_contact_phone),
+                    social_media_1 = COALESCE(%s, social_media_1),
+                    social_media_2 = COALESCE(%s, social_media_2),
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (
+                data.get('full_name'), data.get('date_of_birth'), data.get('address'),
+                data.get('nin'), data.get('next_of_kin_name'), data.get('next_of_kin_phone'),
+                data.get('next_of_kin_address'), data.get('emergency_contact_name'),
+                data.get('emergency_contact_phone'), data.get('social_media_1'),
+                data.get('social_media_2'), user_id
+            ))
+            
+            # Create/update job_seeker_profiles
             cur.execute("SELECT id FROM job_seeker_profiles WHERE user_id = %s", (user_id,))
-            profile = cur.fetchone()
-            if profile:
+            if cur.fetchone():
                 cur.execute("""
-                    UPDATE job_seeker_profiles SET 
-                        full_name = COALESCE(%s, full_name),
-                        nin = COALESCE(%s, nin),
-                        date_of_birth = COALESCE(%s::date, date_of_birth),
-                        address = COALESCE(%s, address),
-                        verification_status = 'pending'
+                    UPDATE job_seeker_profiles SET full_name = COALESCE(%s, full_name),
+                    nin = COALESCE(%s, nin), date_of_birth = COALESCE(%s::date, date_of_birth),
+                    address = COALESCE(%s, address), verification_status = 'pending'
                     WHERE user_id = %s
-                """, (data.get('full_name'), data.get('nin'),
-                      data.get('date_of_birth'), data.get('address'), user_id))
+                """, (data.get('full_name'), data.get('nin'), data.get('date_of_birth'), data.get('address'), user_id))
             else:
                 cur.execute("""
-                    INSERT INTO job_seeker_profiles 
-                    (user_id, full_name, nin, date_of_birth, address, verification_status)
+                    INSERT INTO job_seeker_profiles (user_id, full_name, nin, date_of_birth, address, verification_status)
                     VALUES (%s, %s, %s, %s, %s, 'pending')
                 """, (user_id, data.get('full_name', email), data.get('nin', 'PENDING'),
-                      data.get('date_of_birth', '2000-01-01'), data.get('address', 'Address to be updated')))
-        
-        elif user_type == 'agent':
-            cur.execute("SELECT id FROM agent_profiles WHERE user_id = %s", (user_id,))
-            agent_profile = cur.fetchone()
-            if agent_profile:
-                cur.execute("""
-                    UPDATE agent_profiles SET 
-                        full_name = COALESCE(%s, full_name),
-                        nin = COALESCE(%s, nin),
-                        bvn = COALESCE(%s, bvn),
-                        date_of_birth = COALESCE(%s::date, date_of_birth),
-                        address = COALESCE(%s, address),
-                        guarantor_name = COALESCE(%s, guarantor_name),
-                        guarantor_phone = COALESCE(%s, guarantor_phone),
-                        verification_status = 'pending'
-                    WHERE user_id = %s
-                """, (data.get('full_name'), data.get('nin'), data.get('bvn'),
-                      data.get('date_of_birth'), data.get('address'),
-                      data.get('guarantor_name'), data.get('guarantor_phone'), user_id))
-            else:
-                cur.execute("""
-                    INSERT INTO agent_profiles 
-                    (user_id, full_name, nin, bvn, date_of_birth, address,
-                     guarantor_name, guarantor_phone, verification_status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending')
-                """, (user_id, data.get('full_name', email), data.get('nin', 'PENDING'),
-                      data.get('bvn', 'PENDING'), data.get('date_of_birth', '2000-01-01'),
-                      data.get('address', 'Address to be updated'),
-                      data.get('guarantor_name', ''), data.get('guarantor_phone', '')))
+                      data.get('date_of_birth', '2000-01-01'), data.get('address', 'Address TBD')))
+            
+        elif user_type in ('agent', 'staff'):
+            cur.execute("""
+                UPDATE users SET 
+                    verification_status = 'pending',
+                    full_name = COALESCE(%s, full_name),
+                    date_of_birth = COALESCE(%s::date, date_of_birth),
+                    address = COALESCE(%s, address),
+                    nin = COALESCE(%s, nin),
+                    bvn = COALESCE(%s, bvn),
+                    bank_name = COALESCE(%s, bank_name),
+                    account_number = COALESCE(%s, account_number),
+                    account_name = COALESCE(%s, account_name),
+                    guarantor_name = COALESCE(%s, guarantor_name),
+                    guarantor_phone = COALESCE(%s, guarantor_phone),
+                    guarantor_address = COALESCE(%s, guarantor_address),
+                    next_of_kin_name = COALESCE(%s, next_of_kin_name),
+                    next_of_kin_phone = COALESCE(%s, next_of_kin_phone),
+                    next_of_kin_address = COALESCE(%s, next_of_kin_address),
+                    emergency_contact_name = COALESCE(%s, emergency_contact_name),
+                    emergency_contact_phone = COALESCE(%s, emergency_contact_phone),
+                    social_media_1 = COALESCE(%s, social_media_1),
+                    social_media_2 = COALESCE(%s, social_media_2),
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (
+                data.get('full_name'), data.get('date_of_birth'), data.get('address'),
+                data.get('nin'), data.get('bvn'), data.get('bank_name'),
+                data.get('account_number'), data.get('account_name'),
+                data.get('guarantor_name'), data.get('guarantor_phone'),
+                data.get('guarantor_address'), data.get('next_of_kin_name'),
+                data.get('next_of_kin_phone'), data.get('next_of_kin_address'),
+                data.get('emergency_contact_name'), data.get('emergency_contact_phone'),
+                data.get('social_media_1'), data.get('social_media_2'), user_id
+            ))
+            
+            # Create/update agent_profiles
+            if user_type == 'agent':
+                cur.execute("SELECT id FROM agent_profiles WHERE user_id = %s", (user_id,))
+                if cur.fetchone():
+                    cur.execute("""
+                        UPDATE agent_profiles SET full_name = COALESCE(%s, full_name),
+                        nin = COALESCE(%s, nin), bvn = COALESCE(%s, bvn),
+                        date_of_birth = COALESCE(%s::date, date_of_birth), address = COALESCE(%s, address),
+                        guarantor_name = COALESCE(%s, guarantor_name), guarantor_phone = COALESCE(%s, guarantor_phone),
+                        verification_status = 'pending' WHERE user_id = %s
+                    """, (data.get('full_name'), data.get('nin'), data.get('bvn'),
+                          data.get('date_of_birth'), data.get('address'),
+                          data.get('guarantor_name'), data.get('guarantor_phone'), user_id))
+                else:
+                    cur.execute("""
+                        INSERT INTO agent_profiles (user_id, full_name, nin, bvn, date_of_birth, address,
+                        guarantor_name, guarantor_phone, verification_status)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+                    """, (user_id, data.get('full_name', email), data.get('nin', 'PENDING'),
+                          data.get('bvn', 'PENDING'), data.get('date_of_birth', '2000-01-01'),
+                          data.get('address', 'Address TBD'), data.get('guarantor_name', ''), data.get('guarantor_phone', '')))
         
         # Log activity
         cur.execute("""
             INSERT INTO activity_logs (user_id, user_email, activity_type, 
                 activity_description, module, severity, ip_address)
             VALUES (%s, %s, 'verification_submitted', %s, 'verification', 'info', %s)
-        """, (user_id, email, 
-              f'{user_type} submitted verification documents', request.remote_addr))
+        """, (user_id, email, f'{user_type} submitted verification', request.remote_addr))
         
         # Send verification email
         try:
@@ -497,7 +505,7 @@ def submit_verification():
             content = Content("text/html", f'''
                 <h2>Verification Submitted</h2>
                 <p>Dear {data.get('full_name', 'User')},</p>
-                <p>Your verification documents have been received (24-48 hour review).</p>
+                <p>Your documents have been received. Review takes 24-48 hours.</p>
             ''')
             mail = Mail(from_email, to_email, "Verification Submitted - JobConnect Nigeria", content)
             sg.client.mail.send.post(request_body=mail.get())
@@ -508,7 +516,7 @@ def submit_verification():
         cur.close()
         conn.close()
         
-        return jsonify({"success": True, "message": "Verification documents submitted successfully"}), 200
+        return jsonify({"success": True, "message": "Verification submitted successfully!"}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
