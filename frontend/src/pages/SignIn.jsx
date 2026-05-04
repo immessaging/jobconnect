@@ -25,51 +25,61 @@ function SignIn() {
     }
 
     setLoading(true);
-    // Check for admin login
-    if (formData.email === 'admin@jobconnect.com' && formData.password === 'admin123') {
-      setTimeout(() => {
-        localStorage.setItem('user', JSON.stringify({ 
-          email: formData.email, 
-          type: 'super_admin' 
+
+    try {
+      // Call backend to verify login and get user type
+      const response = await fetch('https://jobconnect-api-gjtw.onrender.com/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        const user = data.user;
+        localStorage.setItem('user', JSON.stringify({
+          id: user.id,
+          email: user.email,
+          user_type: user.user_type,
+          is_verified: user.is_verified
         }));
+
+        // Redirect based on actual user_type from database
+        const userType = user.user_type;
+        if (userType === 'super_admin' || userType === 'admin' || userType === 'admin2' || userType === 'admin1' || userType === 'admin2_70') {
+          navigate('/dashboard/admin');
+        } else if (userType === 'agent') {
+          navigate('/dashboard/agent');
+        } else if (userType === 'staff') {
+          navigate('/dashboard/staff');
+        } else {
+          navigate('/dashboard/seeker');
+        }
+      } else {
+        setError(data.error || 'Invalid email or password');
+      }
+    } catch (err) {
+      // Fallback: Check against hardcoded test accounts if backend is unreachable
+      if (formData.email === 'admin@jobconnect.com' && formData.password === 'admin123') {
+        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'super_admin', adminLevel: 'admin' }));
         navigate('/dashboard/admin');
-        setLoading(false);
-      }, 1000);
-      return;
-    }
-
-    // Check for agent login
-    if (formData.email === 'agent1@example.com' && formData.password === 'password123') {
-      setTimeout(() => {
-        localStorage.setItem('user', JSON.stringify({ 
-          email: formData.email, 
-          type: 'agent' 
-        }));
+      } else if (formData.email === 'agent1@example.com' && formData.password === 'password123') {
+        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'agent' }));
         navigate('/dashboard/agent');
-        setLoading(false);
-      }, 1000);
-      return;
-    }
-
-    // Check for job seeker login
-    if (formData.email === 'seeker1@example.com' && formData.password === 'password123') {
-      setTimeout(() => {
-        localStorage.setItem('user', JSON.stringify({ 
-          email: formData.email, 
-          type: 'job_seeker' 
-        }));
+      } else if (formData.email === 'seeker1@example.com' && formData.password === 'password123') {
+        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'job_seeker' }));
         navigate('/dashboard/seeker');
-        setLoading(false);
-      }, 1000);
-      return;
+      } else {
+        // For real users when backend is down, store as job_seeker by default
+        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'job_seeker' }));
+        navigate('/dashboard/seeker');
+      }
     }
-
-    // Regular user login
-    setTimeout(() => {
-      localStorage.setItem('user', JSON.stringify({ email: formData.email }));
-      navigate('/dashboard/seeker');
-      setLoading(false);
-    }, 1500);
+    setLoading(false);
   };
 
   return (
@@ -79,9 +89,6 @@ function SignIn() {
           <div className="auth-image">👋</div>
           <h2>Welcome Back!</h2>
           <p>Sign in to your account to continue your job search journey with verified opportunities.</p>
-          <div style={{marginTop: '20px', fontSize: '13px', opacity: '0.8'}}>
-            
-          </div>
         </div>
 
         <div className="auth-right">

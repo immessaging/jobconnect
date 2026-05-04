@@ -162,7 +162,46 @@ def post_job():
         return jsonify({"success": True, "message": "Job posted", "job_id": str(job_id)}), 201
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
-
+# ============================================
+# USER LOGIN
+# ============================================
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    try:
+        data = request.json
+        email = data.get('email')
+        password = data.get('password')
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT id, email, user_type, is_verified, password_hash
+            FROM users WHERE email = %s
+        """, (email,))
+        
+        user = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if not user:
+            return jsonify({"success": False, "error": "Invalid email or password"}), 401
+        
+        stored_password = user[4]
+        if password != stored_password:
+            return jsonify({"success": False, "error": "Invalid email or password"}), 401
+        
+        return jsonify({
+            "success": True,
+            "user": {
+                "id": str(user[0]),
+                "email": user[1],
+                "user_type": user[2],
+                "is_verified": user[3]
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 # ============================================
 # USER REGISTRATION (with Welcome Email)
 # ============================================
