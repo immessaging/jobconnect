@@ -286,29 +286,7 @@ def register():
         return jsonify({"success": True, "message": "Registration successful", "user_id": str(user_id)}), 201
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
-        # Send welcome email
-        try:
-            sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-            from_email = Email(FROM_EMAIL, FROM_NAME)
-            to_email = To(data['email'])
-            content = Content("text/html", f'''
-                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-                    <h2 style="color:#d4a843;">Welcome to JobConnect Nigeria!</h2>
-                    <p>Thank you for registering!</p>
-                    <p>Complete your profile to start finding verified jobs.</p>
-                    <a href="https://jobconnect-sage.vercel.app/dashboard/seeker" 
-                       style="background:#d42027;color:white;padding:12px 24px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:15px;">
-                       Go to Dashboard
-                    </a>
-                </div>''')
-            mail = Mail(from_email, to_email, "Welcome to JobConnect Nigeria!", content)
-            sg.client.mail.send.post(request_body=mail.get())
-        except:
-            pass  # Don't fail registration if email fails
         
-        return jsonify({"success": True, "message": "Registration successful", "user_id": str(user_id)}), 201
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
 
 # ============================================
 # TEST DATA ENDPOINT
