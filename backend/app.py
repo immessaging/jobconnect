@@ -188,18 +188,23 @@ def login():
             return jsonify({"success": False, "error": "Invalid email or password"}), 401
         
         stored_password = user[4]
-        if password != stored_password:
-            return jsonify({"success": False, "error": "Invalid email or password"}), 401
         
-        return jsonify({
-            "success": True,
-            "user": {
-                "id": str(user[0]),
-                "email": user[1],
-                "user_type": user[2],
-                "is_verified": user[3]
-            }
-        }), 200
+        # Check hashed password
+        import hashlib
+        input_hashed = hashlib.sha256(password.encode()).hexdigest()
+        
+        if input_hashed == stored_password or password == stored_password:
+            return jsonify({
+                "success": True,
+                "user": {
+                    "id": str(user[0]),
+                    "email": user[1],
+                    "user_type": user[2],
+                    "is_verified": user[3]
+                }
+            }), 200
+        else:
+            return jsonify({"success": False, "error": "Invalid email or password"}), 401
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 # ============================================
@@ -231,15 +236,43 @@ def register():
             cur.close(); conn.close()
             return jsonify({"success": False, "error": "Phone already registered"}), 409
         
+        # Hash the password
+        import hashlib
+        hashed = hashlib.sha256(data['password'].encode()).hexdigest()
+        
         cur.execute("""
             INSERT INTO users (email, phone, password_hash, user_type)
             VALUES (%s, %s, %s, %s) RETURNING id
-        """, (data['email'], data['phone'], data['password'], data['user_type']))
+        """, (data['email'], data['phone'], hashed, data['user_type']))
         
         user_id = cur.fetchone()[0]
         conn.commit()
-        cur.close(); conn.close()
+        cur.close()
+        conn.close()
         
+        # Send welcome email
+        try:
+            sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+            from_email = Email(FROM_EMAIL, FROM_NAME)
+            to_email = To(data['email'])
+            content = Content("text/html", f'''
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+                    <h2 style="color:#d4a843;">Welcome to JobConnect Nigeria!</h2>
+                    <p>Thank you for registering!</p>
+                    <p>Complete your profile to start finding verified jobs.</p>
+                    <a href="https://jobconnect-sage.vercel.app/dashboard/seeker" 
+                       style="background:#d42027;color:white;padding:12px 24px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:15px;">
+                       Go to Dashboard
+                    </a>
+                </div>''')
+            mail = Mail(from_email, to_email, "Welcome to JobConnect Nigeria!", content)
+            sg.client.mail.send.post(request_body=mail.get())
+        except:
+            pass
+        
+        return jsonify({"success": True, "message": "Registration successful", "user_id": str(user_id)}), 201
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
         # Send welcome email
         try:
             sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
@@ -369,10 +402,13 @@ def submit_verification():
                 full_name = COALESCE(%s, full_name),
                 date_of_birth = COALESCE(%s::date, date_of_birth),
                 address = COALESCE(%s, address),
+                city = COALESCE(%s, city),
+                state = COALESCE(%s, state),
                 nin = COALESCE(%s, nin),
                 bvn = COALESCE(%s, bvn),
                 bank_name = COALESCE(%s, bank_name),
                 account_number = COALESCE(%s, account_number),
+                account_name = COALESCE(%s, account_name),
                 guarantor_name = COALESCE(%s, guarantor_name),
                 guarantor_phone = COALESCE(%s, guarantor_phone),
                 guarantor_address = COALESCE(%s, guarantor_address),
