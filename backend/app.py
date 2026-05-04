@@ -162,7 +162,7 @@ def post_job():
         return jsonify({"success": True, "message": "Job posted", "job_id": str(job_id)}), 201
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
-# ============================================
+ # ============================================
 # USER LOGIN
 # ============================================
 @app.route('/api/auth/login', methods=['POST'])
@@ -188,15 +188,14 @@ def login():
             return jsonify({"success": False, "error": "Invalid email or password"}), 401
         
         stored_password = user[4]
+        import hashlib
         
         # Try SHA256 first
-        import hashlib
         input_hashed = hashlib.sha256(password.encode()).hexdigest()
-        
         if input_hashed == stored_password:
             return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
         
-        # Try bcrypt (for old passwords)
+        # Try bcrypt
         try:
             import bcrypt
             if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
@@ -204,8 +203,18 @@ def login():
         except:
             pass
         
-        # Try plain text (for old users)
+        # Try plain text and auto-upgrade to SHA256
         if password == stored_password:
+            new_hash = hashlib.sha256(password.encode()).hexdigest()
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, str(user[0])))
+                conn.commit()
+                cur.close()
+                conn.close()
+            except:
+                pass
             return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
         
         return jsonify({"success": False, "error": "Invalid email or password"}), 401
