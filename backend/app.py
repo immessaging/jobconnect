@@ -189,22 +189,26 @@ def login():
         
         stored_password = user[4]
         
-        # Check hashed password
+        # Try SHA256 first
         import hashlib
         input_hashed = hashlib.sha256(password.encode()).hexdigest()
         
-        if input_hashed == stored_password or password == stored_password:
-            return jsonify({
-                "success": True,
-                "user": {
-                    "id": str(user[0]),
-                    "email": user[1],
-                    "user_type": user[2],
-                    "is_verified": user[3]
-                }
-            }), 200
-        else:
-            return jsonify({"success": False, "error": "Invalid email or password"}), 401
+        if input_hashed == stored_password:
+            return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
+        
+        # Try bcrypt (for old passwords)
+        try:
+            import bcrypt
+            if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+                return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
+        except:
+            pass
+        
+        # Try plain text (for old users)
+        if password == stored_password:
+            return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
+        
+        return jsonify({"success": False, "error": "Invalid email or password"}), 401
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 # ============================================
