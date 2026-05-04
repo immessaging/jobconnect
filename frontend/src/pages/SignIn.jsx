@@ -27,15 +27,20 @@ function SignIn() {
     setLoading(true);
 
     try {
-      // Call backend to verify login and get user type
+      // Add timeout for Render cold start (up to 60 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const response = await fetch('https://jobconnect-api-gjtw.onrender.com/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: formData.email,
           password: formData.password
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       
       const data = await response.json();
       
@@ -63,8 +68,9 @@ function SignIn() {
         setError(data.error || 'Invalid email or password');
       }
     } catch (err) {
-      // Fallback: Check against hardcoded test accounts if backend is unreachable
-      if (formData.email === 'admin@jobconnect.com' && formData.password === 'admin123') {
+      if (err.name === 'AbortError') {
+        setError('Request timed out. Please try again - the server may be waking up.');
+      } else if (formData.email === 'admin@jobconnect.com' && formData.password === 'admin123') {
         localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'super_admin', adminLevel: 'admin' }));
         navigate('/dashboard/admin');
       } else if (formData.email === 'agent1@example.com' && formData.password === 'password123') {
@@ -74,9 +80,7 @@ function SignIn() {
         localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'job_seeker' }));
         navigate('/dashboard/seeker');
       } else {
-        // For real users when backend is down, store as job_seeker by default
-        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'job_seeker' }));
-        navigate('/dashboard/seeker');
+        setError('Unable to connect to server. Please check your internet connection and try again.');
       }
     }
     setLoading(false);
