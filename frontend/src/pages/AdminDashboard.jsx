@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTestData, getJobs, getAnnouncements, getAnalyticsSummary } from '../services/api';
 import './Dashboard.css';
+import { getTestData, getJobs, getAnnouncements, getAnalyticsSummary, getVerifications, verifyUser } from '../services/api';
 
 function AdminDashboard() {
   const navigate = useNavigate();
@@ -21,6 +22,8 @@ function AdminDashboard() {
 
   // User status tracking
   const [userStatuses, setUserStatuses] = useState({});
+  // Pending verifications
+const [pendingUsers, setPendingUsers] = useState([]);
 
   // Admin role
   const adminRole = user?.adminLevel || 'admin';
@@ -94,16 +97,17 @@ function AdminDashboard() {
   const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', priority: 'normal', audience: 'all' });
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (!userData) { navigate('/signin'); return; }
-    const parsedUser = JSON.parse(userData);
-    if (parsedUser.email === 'admin@jobconnect.com') parsedUser.adminLevel = 'admin';
-    setUser(parsedUser);
-    getTestData().then(res => setUsers(res.data.users || [])).catch(console.log);
-    getJobs().then(res => setJobs(res.data.jobs || [])).catch(console.log);
-    getAnnouncements().then(res => setAnnouncements(res.data.announcements || [])).catch(console.log);
-    getAnalyticsSummary().then(res => setAnalytics(res.data.stats || {})).catch(console.log);
-  }, [navigate]);
+  const userData = localStorage.getItem('user');
+  if (!userData) { navigate('/signin'); return; }
+  const parsedUser = JSON.parse(userData);
+  if (parsedUser.email === 'admin@jobconnect.com') parsedUser.adminLevel = 'admin';
+  setUser(parsedUser);
+  getTestData().then(res => setUsers(res.data.users || [])).catch(console.log);
+  getJobs().then(res => setJobs(res.data.jobs || [])).catch(console.log);
+  getAnnouncements().then(res => setAnnouncements(res.data.announcements || [])).catch(console.log);
+  getAnalyticsSummary().then(res => setAnalytics(res.data.stats || {})).catch(console.log);
+  loadVerifications(); // Add this line
+}, [navigate]);
 
   const handleLogout = () => { localStorage.removeItem('user'); navigate('/signin'); };
 
@@ -155,7 +159,25 @@ function AdminDashboard() {
       alert('❌ Password must be at least 6 characters');
     }
   };
+  // Load pending verifications
+const loadVerifications = () => {
+  getVerifications()
+    .then(res => setPendingUsers(res.data.users || []))
+    .catch(console.log);
+};
 
+// Approve or reject verification
+const handleVerifyAction = async (userId, action) => {
+  if (window.confirm(`${action === 'approve' ? 'Approve' : 'Reject'} this user?`)) {
+    try {
+      await verifyUser(userId, action);
+      alert(`✅ User ${action}d successfully!`);
+      loadVerifications(); // Refresh list
+    } catch {
+      alert('❌ Action failed. Try again.');
+    }
+  }
+};
   const toggleUserStatus = (userId) => {
     setUserStatuses(prev => ({
       ...prev,
@@ -377,7 +399,33 @@ function AdminDashboard() {
             <h4>Call History</h4><div className="table-container"><table className="data-table"><thead><tr><th>With</th><th>Type</th><th>Duration</th><th>Date</th><th>Status</th></tr></thead><tbody>{callLogs.map(c=>(<tr key={c.id}><td>{c.with}</td><td>{c.type==='video'?'📹':'📞'} {c.type}</td><td>{c.duration}</td><td>{c.date}</td><td><span className="badge badge-verified">{c.status}</span></td></tr>))}</tbody></table></div>
           </div>
         )}
-
+        {activeTab === 'verifications' && (
+  <div className="dash-card">
+    <h3>📋 Pending Verifications</h3>
+    <div className="grid-2">
+      {pendingUsers.map(u => (
+        <div key={u.id} className="card" style={{borderLeft:'4px solid #ffc107',padding:'15px'}}>
+          <h4>{u.full_name || u.email}</h4>
+          <span className="badge badge-pending">{u.user_type}</span>
+          {u.passport_photo && (
+            <div style={{marginTop:'10px'}}>
+              <img src={u.passport_photo} alt="Passport" style={{width:'100%',maxWidth:'200px',borderRadius:'8px'}} />
+            </div>
+          )}
+          <p>NIN: {u.nin} | BVN: {u.bvn}</p>
+          <p>Bank: {u.bank_name} | Account: {u.account_number}</p>
+          <p>Address: {u.address}</p>
+          <div style={{display:'flex',gap:'10px',marginTop:'10px'}}>
+            <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}
+              onClick={() => handleVerifyAction(u.id, 'approve')}>✅ Approve</button>
+            <button className="btn-sm" style={{background:'#dc3545',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}
+              onClick={() => handleVerifyAction(u.id, 'reject')}>❌ Reject</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
         {/* ============ NOTICE BOARD TAB ============ */}
         {activeTab === 'noticeboard' && (
           <div className="dash-card">

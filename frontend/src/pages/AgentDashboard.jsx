@@ -175,7 +175,26 @@ function AgentDashboard() {
         {!isVerified && (<div className="verification-warning"><h3>⚠️ NOT VERIFIED</h3><p><strong>Complete verification to access all features.</strong></p><button className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}} onClick={()=>setActiveTab('verification')}>Complete Verification Now</button></div>)}
         <div className="welcome-card"><div><h4>Welcome, {user?.email?.split('@')[0] || 'Agent'}!</h4></div></div>
         {msg && <div className={msg.includes('✅')?'success-message':'error-message'}>{msg}</div>}
-
+       {/* Show uploaded documents */}
+{user?.passport_photo && (
+  <div className="dash-card">
+    <h3>📸 Uploaded Documents</h3>
+    <div style={{display:'flex',gap:'15px',flexWrap:'wrap',marginTop:'10px'}}>
+      {user.passport_photo && (
+        <div>
+          <p><strong>Passport Photo:</strong></p>
+          <img src={user.passport_photo} alt="Passport" style={{width:'150px',borderRadius:'8px',border:'2px solid #d4a843'}} />
+        </div>
+      )}
+      {user.government_id_photo && (
+        <div>
+          <p><strong>Government ID:</strong></p>
+          <img src={user.government_id_photo} alt="ID" style={{width:'150px',borderRadius:'8px',border:'2px solid #d4a843'}} />
+        </div>
+      )}
+    </div>
+  </div>
+)}
         {/* VERIFICATION TAB - FULL AGENT FIELDS */}
         {activeTab === 'verification' && (
           <div className="dash-card form-card">

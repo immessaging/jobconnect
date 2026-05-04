@@ -796,7 +796,79 @@ def agent_confirm_dispute(agreement_id):
         return jsonify({"success": True, "message": "Agent confirmed"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
+ # ============================================
+# ADMIN: GET ALL VERIFICATION DOCUMENTS
+# ============================================
+@app.route('/api/admin/verifications', methods=['GET'])
+def get_all_verifications():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT u.id, u.email, u.user_type, u.full_name, u.verification_status,
+                   u.passport_photo, u.nin, u.bvn, u.bank_name, u.account_number,
+                   u.date_of_birth, u.address, u.city, u.state,
+                   u.guarantor_name, u.guarantor_phone,
+                   u.next_of_kin_name, u.next_of_kin_phone,
+                   u.emergency_contact_name, u.emergency_contact_phone,
+                   u.social_media_1, u.social_media_2,
+                   u.created_at, u.updated_at
+            FROM users u
+            WHERE u.verification_status = 'pending'
+            ORDER BY u.created_at DESC
+        """)
+        
+        users = []
+        for row in cur.fetchall():
+            users.append({
+                "id": str(row[0]), "email": row[1], "user_type": row[2],
+                "full_name": row[3], "verification_status": row[4],
+                "passport_photo": row[5], "nin": row[6], "bvn": row[7],
+                "bank_name": row[8], "account_number": row[9],
+                "date_of_birth": str(row[10]) if row[10] else None,
+                "address": row[11], "city": row[12], "state": row[13],
+                "guarantor_name": row[14], "guarantor_phone": row[15],
+                "next_of_kin_name": row[16], "next_of_kin_phone": row[17],
+                "emergency_contact_name": row[18], "emergency_contact_phone": row[19],
+                "social_media_1": row[20], "social_media_2": row[21],
+                "created_at": str(row[22]), "updated_at": str(row[23])
+            })
+        
+        cur.close(); conn.close()
+        return jsonify({"success": True, "users": users, "count": len(users)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 
+
+@app.route('/api/admin/verify/<user_id>', methods=['POST'])
+def verify_user(user_id):
+    """Approve or reject user verification"""
+    try:
+        data = request.json
+        action = data.get('action')  # 'approve' or 'reject'
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        if action == 'approve':
+            cur.execute("""
+                UPDATE users SET is_verified = true, verification_status = 'verified',
+                verification_level = 1, updated_at = NOW()
+                WHERE id = %s
+            """, (user_id,))
+        else:
+            cur.execute("""
+                UPDATE users SET verification_status = 'rejected', updated_at = NOW()
+                WHERE id = %s
+            """, (user_id,))
+        
+        conn.commit()
+        cur.close(); conn.close()
+        
+        return jsonify({"success": True, "message": f"User {action}d successfully"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 # ============================================
 # ANALYTICS SUMMARY
 # ============================================

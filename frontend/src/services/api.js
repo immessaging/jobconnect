@@ -64,6 +64,9 @@ export const getPlatformStats = () => api.get('/api/stats');
 export const sendEmail = (data) => api.post('/api/email/send', data);
 export const sendNotification = (data) => api.post('/api/email/notify', data); 
 export const submitVerification = (data) => api.post('/api/verify/submit', data);
+
+export const getVerifications = () => api.get('/api/admin/verifications');
+export const verifyUser = (userId, action) => api.post(`/api/admin/verify/${userId}`, { action });
 // ============================================
 // CLOUDINARY FILE UPLOAD
 // ============================================
