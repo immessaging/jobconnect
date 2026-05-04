@@ -5,6 +5,8 @@ import os
 import json
 from dotenv import load_dotenv
 from datetime import datetime
+import sendgrid
+from sendgrid.helpers.mail import Mail, Email, To, Content
 
 load_dotenv()
 
@@ -14,6 +16,11 @@ CORS(app)
 # Database connection helper
 def get_db_connection():
     return psycopg2.connect(os.environ.get('DATABASE_URL'))
+
+# SendGrid Configuration
+SENDGRID_API_KEY = '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'
+FROM_EMAIL = 'noreply@jobconnect.ng'
+FROM_NAME = 'JobConnect Nigeria'
 
 # ============================================
 # HOME ROUTE
@@ -157,7 +164,7 @@ def post_job():
         return jsonify({"success": False, "error": str(e)}), 400
 
 # ============================================
-# USER REGISTRATION
+# USER REGISTRATION (with Welcome Email)
 # ============================================
 @app.route('/api/auth/register', methods=['POST'])
 def register():
@@ -193,6 +200,26 @@ def register():
         user_id = cur.fetchone()[0]
         conn.commit()
         cur.close(); conn.close()
+        
+        # Send welcome email
+        try:
+            sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+            from_email = Email(FROM_EMAIL, FROM_NAME)
+            to_email = To(data['email'])
+            content = Content("text/html", f'''
+                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+                    <h2 style="color:#d4a843;">Welcome to JobConnect Nigeria!</h2>
+                    <p>Thank you for registering!</p>
+                    <p>Complete your profile to start finding verified jobs.</p>
+                    <a href="https://jobconnect-sage.vercel.app/dashboard/seeker" 
+                       style="background:#d42027;color:white;padding:12px 24px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:15px;">
+                       Go to Dashboard
+                    </a>
+                </div>''')
+            mail = Mail(from_email, to_email, "Welcome to JobConnect Nigeria!", content)
+            sg.client.mail.send.post(request_body=mail.get())
+        except:
+            pass  # Don't fail registration if email fails
         
         return jsonify({"success": True, "message": "Registration successful", "user_id": str(user_id)}), 201
     except Exception as e:
@@ -245,32 +272,18 @@ def get_platform_stats():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        
         stats = {}
-        
-        # Active jobs count
         cur.execute("SELECT COUNT(*) FROM job_listings WHERE status = 'active'")
         stats['active_jobs'] = cur.fetchone()[0]
-        
-        # Filled/secured jobs
         cur.execute("SELECT COUNT(*) FROM job_listings WHERE status = 'filled'")
         stats['jobs_secured'] = cur.fetchone()[0]
-        
-        # Total users
         cur.execute("SELECT COUNT(*) FROM users")
         stats['total_users'] = cur.fetchone()[0]
-        
-        # Verified agents
         cur.execute("SELECT COUNT(*) FROM users WHERE user_type = 'agent' AND is_verified = true")
         stats['verified_agents'] = cur.fetchone()[0]
-        
-        # Total commission paid
         cur.execute("SELECT COALESCE(SUM(commission_amount), 0) FROM commission_agreements WHERE payment_status = 'paid'")
         stats['total_commission'] = float(cur.fetchone()[0])
-        
-        cur.close()
-        conn.close()
-        
+        cur.close(); conn.close()
         return jsonify({"success": True, "stats": stats})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -305,10 +318,8 @@ def submit_verification():
         data = request.json
         user_id = data.get('user_id')
         user_type = data.get('user_type', 'job_seeker')
-        
         conn = get_db_connection()
         cur = conn.cursor()
-        
         cur.execute("""
             UPDATE users SET 
                 verification_status = 'pending',
@@ -329,14 +340,12 @@ def submit_verification():
             data.get('emergency_contact_name'), data.get('emergency_contact_phone'),
             data.get('social_media_1'), data.get('social_media_2'), user_id
         ))
-        
         cur.execute("""
             INSERT INTO activity_logs (user_id, user_email, activity_type, 
                 activity_description, module, severity, ip_address)
             VALUES (%s, %s, 'verification_submitted', %s, 'verification', 'info', %s)
         """, (user_id, data.get('email'), 
               f'{user_type} submitted verification documents', request.remote_addr))
-        
         conn.commit()
         cur.close(); conn.close()
         return jsonify({"success": True, "message": "Verification documents submitted successfully"}), 200
@@ -344,7 +353,7 @@ def submit_verification():
         return jsonify({"success": False, "error": str(e)}), 400
 
 # ============================================
-# GPS LOCATION TRACKING
+# GPS LOCATION TRACKING - FULL
 # ============================================
 @app.route('/api/gps/track', methods=['POST'])
 def track_gps_location():
@@ -355,21 +364,168 @@ def track_gps_location():
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO gps_locations (user_id, user_email, latitude, longitude, accuracy,
-                city, state, country, location_string, ip_address, session_id, user_agent)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (user_id, data.get('email'), data['latitude'], data['longitude'],
-              data.get('accuracy'), data.get('city', ''), data.get('state', ''),
-              data.get('country', 'Nigeria'), data.get('location_string', ''),
-              request.remote_addr, data.get('session_id', ''),
-              request.headers.get('User-Agent', '')))
+                altitude, speed, heading, city, state, country, location_string, 
+                ip_address, session_id, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            user_id, data.get('email'), data['latitude'], data['longitude'],
+            data.get('accuracy'), data.get('altitude'), data.get('speed'),
+            data.get('heading'), data.get('city', ''), data.get('state', ''),
+            data.get('country', 'Nigeria'), data.get('location_string', ''),
+            request.remote_addr, data.get('session_id', ''),
+            request.headers.get('User-Agent', '')
+        ))
+        location_id = cur.fetchone()[0]
         if user_id:
             cur.execute("""
-                UPDATE users SET gps_latitude = %s, gps_longitude = %s,
-                gps_accuracy = %s, last_location_update = NOW() WHERE id = %s
-            """, (data['latitude'], data['longitude'], data.get('accuracy'), user_id))
+                UPDATE users SET 
+                    gps_latitude = %s, gps_longitude = %s,
+                    gps_accuracy = %s, last_location_update = NOW(),
+                    city = COALESCE(%s, city),
+                    state = COALESCE(%s, state)
+                WHERE id = %s
+            """, (data['latitude'], data['longitude'], data.get('accuracy'),
+                  data.get('city'), data.get('state'), user_id))
         conn.commit()
         cur.close(); conn.close()
-        return jsonify({"success": True, "message": "Location tracked"})
+        return jsonify({"success": True, "message": "Location tracked", "id": str(location_id)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route('/api/gps/history/<user_id>', methods=['GET'])
+def get_gps_history(user_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, latitude, longitude, accuracy, altitude, speed, 
+                   city, state, country, location_string, created_at
+            FROM gps_locations WHERE user_id = %s 
+            ORDER BY created_at DESC LIMIT 50
+        """, (user_id,))
+        locations = []
+        for row in cur.fetchall():
+            locations.append({
+                "id": str(row[0]), "latitude": float(row[1]) if row[1] else None,
+                "longitude": float(row[2]) if row[2] else None,
+                "accuracy": float(row[3]) if row[3] else None,
+                "altitude": float(row[4]) if row[4] else None,
+                "speed": float(row[5]) if row[5] else None,
+                "city": row[6], "state": row[7], "country": row[8],
+                "location_string": row[9], "timestamp": str(row[10])
+            })
+        cur.close(); conn.close()
+        return jsonify({"success": True, "locations": locations})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route('/api/gps/all-users', methods=['GET'])
+def get_all_user_locations():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT ON (u.id) 
+                u.id, u.email, u.user_type, u.gps_latitude, u.gps_longitude,
+                u.gps_accuracy, u.city, u.state, u.last_location_update
+            FROM users u WHERE u.gps_latitude IS NOT NULL
+            ORDER BY u.id, u.last_location_update DESC
+        """)
+        users = []
+        for row in cur.fetchall():
+            users.append({
+                "id": str(row[0]), "email": row[1], "type": row[2],
+                "latitude": float(row[3]) if row[3] else None,
+                "longitude": float(row[4]) if row[4] else None,
+                "accuracy": float(row[5]) if row[5] else None,
+                "city": row[6], "state": row[7],
+                "last_update": str(row[8]) if row[8] else None
+            })
+        cur.close(); conn.close()
+        return jsonify({"success": True, "users": users})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# ============================================
+# SENDGRID EMAIL NOTIFICATIONS
+# ============================================
+@app.route('/api/email/send', methods=['POST'])
+def send_email():
+    try:
+        data = request.json
+        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+        from_email = Email(FROM_EMAIL, FROM_NAME)
+        to_email = To(data.get('to'))
+        subject = data.get('subject')
+        content = Content("text/html", data.get('body', ''))
+        mail = Mail(from_email, to_email, subject, content)
+        response = sg.client.mail.send.post(request_body=mail.get())
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO activity_logs (user_id, user_email, activity_type, 
+                activity_description, module, severity, ip_address)
+            VALUES (%s, %s, 'email_sent', %s, 'notifications', 'info', %s)
+        """, (data.get('user_id'), data.get('to'),
+              f"Email sent to {data.get('to')}: {subject}", request.remote_addr))
+        conn.commit()
+        cur.close(); conn.close()
+        return jsonify({"success": True, "message": "Email sent", "status_code": response.status_code}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route('/api/email/notify', methods=['POST'])
+def send_notification_email():
+    try:
+        data = request.json
+        email_type = data.get('type')
+        recipient = data.get('to')
+        user_name = data.get('name', 'User')
+        templates = {
+            'welcome': {
+                'subject': 'Welcome to JobConnect Nigeria! 🇳🇬',
+                'body': f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+                    <h2 style="color:#d4a843;">Welcome to JobConnect Nigeria, {user_name}!</h2>
+                    <p>Thank you for joining Nigeria's most trusted job connection platform.</p>
+                    <p>Complete your profile verification to access all features.</p>
+                    <a href="https://jobconnect-sage.vercel.app" style="background:#d42027;color:white;padding:12px 24px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:15px;">Go to Dashboard</a>
+                </div>'''
+            },
+            'payment': {
+                'subject': 'Payment Confirmed - JobConnect Nigeria',
+                'body': f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+                    <h2 style="color:#28a745;">✅ Payment Confirmed!</h2>
+                    <p>Dear {user_name},</p>
+                    <p>Your commission payment of <strong>₦{data.get('amount', 0):,}</strong> has been received and is securely held in escrow.</p>
+                    <p><strong>Reference:</strong> {data.get('reference', 'N/A')}</p>
+                </div>'''
+            },
+            'verification': {
+                'subject': 'Verification Update - JobConnect Nigeria',
+                'body': f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+                    <h2 style="color:#d4a843;">Verification Update</h2>
+                    <p>Dear {user_name},</p>
+                    <p>Your verification documents have been received and are under review (24-48 hours).</p>
+                </div>'''
+            },
+            'dispute': {
+                'subject': 'Dispute Update - JobConnect Nigeria',
+                'body': f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+                    <h2 style="color:#d42027;">Dispute Update</h2>
+                    <p>Dear {user_name},</p>
+                    <p>Status: {data.get('status', 'Under Review')}</p>
+                </div>'''
+            }
+        }
+        template = templates.get(email_type, templates['welcome'])
+        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+        from_email = Email(FROM_EMAIL, FROM_NAME)
+        to_email = To(recipient)
+        content = Content("text/html", template['body'])
+        mail = Mail(from_email, to_email, template['subject'], content)
+        response = sg.client.mail.send.post(request_body=mail.get())
+        return jsonify({"success": True, "message": "Notification sent"}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 

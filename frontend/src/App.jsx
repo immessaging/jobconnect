@@ -17,6 +17,8 @@ import Services from './pages/Services';
 import Gallery from './pages/Gallery';
 import Podcast from './pages/Podcast';
 import Courses from './pages/Courses';
+import Privacy from './pages/Privacy';
+import CookieConsent from './components/CookieConsent';
 import logoImg from './assets/images/job_connect_logo.png';
 
 // Protected Route Component
@@ -78,6 +80,7 @@ function App() {
             <Route path="/gallery" element={<Gallery />} />
             <Route path="/podcast" element={<Podcast />} />
             <Route path="/courses" element={<Courses />} />
+            <Route path="/privacy" element={<Privacy />} />
             
             {/* Protected Dashboard Routes */}
             <Route path="/dashboard/seeker" element={
@@ -128,16 +131,20 @@ function App() {
             </div>
             <div className="footer-section">
               <h4>Support</h4>
-              <p>📧 support@jobconnect.ng</p>
-              <p>📞 0800-JOBCONNECT</p>
+              <p>📧 eitsolutions556@gmail.com</p>
+              <p>📞 +2348163464557</p>
               <p>📍 Lagos, Nigeria</p>
               <Link to="/reset-password">Reset Password</Link>
+              <Link to="/privacy">Privacy Policy</Link>
             </div>
           </div>
           <div className="footer-bottom">
-            <p>&copy; 2024 JobConnect Nigeria. All rights reserved. | Privacy Policy | Terms of Service | Refund Policy</p>
+            <p>&copy; 2026 JobConnect Nigeria. All rights reserved. | <Link to="/privacy">Privacy Policy</Link> | Terms of Service | Refund Policy</p>
           </div>
         </footer>
+
+        {/* Cookie Consent Banner */}
+        <CookieConsent />
       </div>
     </Router>
   );
