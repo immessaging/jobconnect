@@ -441,13 +441,37 @@ const handleVerifyAction = async (userId, action) => {
         )}
 
         {/* Quick placeholder for remaining tabs */}
-        {['accesslogs','activitylogs','auditlogs','gps','analytics','courses','services','settings','jobs','testimonials','transactions'].includes(activeTab) && (
-          <div className="dash-card"><h3>{activeTab.charAt(0).toUpperCase()+activeTab.slice(1)}</h3><p className="text-muted">Content loaded from data.</p>
+          {/* Quick placeholder for remaining tabs */}
+        {['accesslogs','activitylogs','auditlogs','gps','analytics','courses','services','settings','jobs','testimonials','transactions','verifications'].includes(activeTab) && (
+          <div className="dash-card">
+            <h3>{activeTab.charAt(0).toUpperCase()+activeTab.slice(1)}</h3>
+            {activeTab==='verifications' && (
+              <div>
+                <p className="text-muted">Pending: {pendingUsers.length} users</p>
+                <div className="grid-2" style={{marginTop:'10px'}}>
+                  {pendingUsers.length === 0 ? <p>No pending verifications</p> :
+                    pendingUsers.map(u => (
+                      <div key={u.id} className="card" style={{borderLeft:'4px solid #ffc107',padding:'15px'}}>
+                        <h4>{u.full_name || u.email}</h4>
+                        <span className="badge badge-pending">{u.user_type}</span>
+                        <p>NIN: {u.nin || 'N/A'} | BVN: {u.bvn || 'N/A'}</p>
+                        <div style={{display:'flex',gap:'10px',marginTop:'10px'}}>
+                          <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}
+                            onClick={() => handleVerifyAction(u.id, 'approve')}>✅ Approve</button>
+                          <button className="btn-sm" style={{background:'#dc3545',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}
+                            onClick={() => handleVerifyAction(u.id, 'reject')}>❌ Reject</button>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+            )}
             {activeTab==='accesslogs' && <div className="table-container"><table className="data-table"><thead><tr><th>User</th><th>Page</th><th>IP</th><th>GPS</th><th>Time</th></tr></thead><tbody>{accessLogs.map(l=>(<tr key={l.id}><td>{l.user}</td><td>{l.page}</td><td>{l.ip}</td><td>{l.gps}</td><td>{l.time}</td></tr>))}</tbody></table></div>}
             {activeTab==='activitylogs' && <div className="table-container"><table className="data-table"><thead><tr><th>User</th><th>Action</th><th>Module</th><th>Time</th></tr></thead><tbody>{activityLogs.map(l=>(<tr key={l.id}><td>{l.user}</td><td><span className="badge badge-gold">{l.action}</span></td><td>{l.module}</td><td>{l.time}</td></tr>))}</tbody></table></div>}
             {activeTab==='auditlogs' && <div className="table-container"><table className="data-table"><thead><tr><th>User</th><th>Action</th><th>Table</th><th>Change</th></tr></thead><tbody>{auditLogs.map(l=>(<tr key={l.id}><td>{l.user}</td><td>{l.action}</td><td>{l.table}</td><td>{l.change}</td></tr>))}</tbody></table></div>}
             {activeTab==='gps' && <div className="map-container"><iframe src="https://maps.google.com/maps?q=Lagos,Nigeria&z=10&output=embed" style={{width:'100%',height:'350px',border:'none',borderRadius:'8px'}} title="GPS"></iframe></div>}
-            {activeTab==='settings' && <div className="form-card"><div className="form-row"><div className="form-group"><label>Platform Fee (%)</label><input type="number" defaultValue="17"/></div><div className="form-group"><label>Agent Payout (%)</label><input type="number" defaultValue="83"/></div></div><button className="btn-gold" style={{marginTop:'15px'}}>Save Settings</button></div>}
+            {activeTab==='settings' && <div className="form-card"><div className="form-row"><div className="form-group"><label>Platform Fee (%)</label><input type="number" defaultValue="17"/></div><div className="form-group"><label>Agent Payout (%)</label><input type="number" defaultValue="83"/></div></div><button className="btn-gold" style={{marginTop:'15px'}} onClick={()=>alert('✅ Saved!')}>Save Settings</button></div>}
           </div>
         )}
       </div>
@@ -456,3 +480,4 @@ const handleVerifyAction = async (userId, action) => {
 }
 
 export default AdminDashboard;
+
