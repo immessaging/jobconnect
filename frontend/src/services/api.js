@@ -64,4 +64,23 @@ export const getPlatformStats = () => api.get('/api/stats');
 export const sendEmail = (data) => api.post('/api/email/send', data);
 export const sendNotification = (data) => api.post('/api/email/notify', data); 
 export const submitVerification = (data) => api.post('/api/verify/submit', data);
+// ============================================
+// CLOUDINARY FILE UPLOAD
+// ============================================
+const CLOUD_NAME = 'dsvum6ztj';
+const UPLOAD_PRESET = 'jobconnect_uploads';
+
+export const uploadToCloudinary = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', UPLOAD_PRESET);
+  
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+    { method: 'POST', body: formData }
+  );
+  
+  const data = await response.json();
+  return data.secure_url;
+};
 export default api;

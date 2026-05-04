@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAgentJobs, postJob, submitVerification } from '../services/api';
 import './Dashboard.css';
+import { submitVerification, uploadToCloudinary } from '../services/api';
 
 function AgentDashboard() {
   const navigate = useNavigate();
@@ -88,12 +89,24 @@ function AgentDashboard() {
   const formatNaira = (num) => '₦' + Number(num).toLocaleString();
 
   const handleVerifySubmit = async () => {
-    setVerifyLoading(true); setVerifyMsg('');
-    try {
-      await submitVerification({ user_id: user?.id, email: user?.email, user_type: 'agent', ...verifyForm });
-      setVerifyMsg('✅ Verification submitted! Our team will review within 24-48 hours.');
-    } catch { setVerifyMsg('❌ Failed to submit.'); }
-    setVerifyLoading(false);
+  setVerifyLoading(true); setVerifyMsg('');
+  try {
+    // Upload files
+    let passportUrl = '', photoUrl = '';
+    const files = document.querySelectorAll('input[type=file]');
+    if (files[0]?.files[0]) passportUrl = await uploadToCloudinary(files[0].files[0]);
+    if (files[1]?.files[0]) photoUrl = await uploadToCloudinary(files[1].files[0]);
+    
+    await submitVerification({
+      user_id: user?.id, email: user?.email, user_type: 'agent',
+      passport_photo: passportUrl,
+      government_id_photo: photoUrl,
+      ...verifyForm
+    });
+    setVerifyMsg('✅ Verification submitted! Our team will review within 24-48 hours.');
+  } catch { setVerifyMsg('❌ Failed to submit.'); }
+  setVerifyLoading(false);
+
   };
 
   const handlePost = async (e) => {
