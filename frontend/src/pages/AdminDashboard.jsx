@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTestData, getJobs, getAnnouncements, getAnalyticsSummary } from '../services/api';
 import './Dashboard.css';
 import { getTestData, getJobs, getAnnouncements, getAnalyticsSummary, getVerifications, verifyUser } from '../services/api';
 
@@ -436,7 +435,7 @@ const handleVerifyAction = async (userId, action) => {
         )}
 
         {/* Quick placeholder for remaining tabs */}
-        {['accesslogs','activitylogs','auditlogs','gps','analytics','courses','services','settings','verifications','jobs','testimonials','transactions'].includes(activeTab) && (
+        {['accesslogs','activitylogs','auditlogs','gps','analytics','courses','services','settings','jobs','testimonials','transactions'].includes(activeTab) && (
           <div className="dash-card"><h3>{activeTab.charAt(0).toUpperCase()+activeTab.slice(1)}</h3><p className="text-muted">Content loaded from data.</p>
             {activeTab==='accesslogs' && <div className="table-container"><table className="data-table"><thead><tr><th>User</th><th>Page</th><th>IP</th><th>GPS</th><th>Time</th></tr></thead><tbody>{accessLogs.map(l=>(<tr key={l.id}><td>{l.user}</td><td>{l.page}</td><td>{l.ip}</td><td>{l.gps}</td><td>{l.time}</td></tr>))}</tbody></table></div>}
             {activeTab==='activitylogs' && <div className="table-container"><table className="data-table"><thead><tr><th>User</th><th>Action</th><th>Module</th><th>Time</th></tr></thead><tbody>{activityLogs.map(l=>(<tr key={l.id}><td>{l.user}</td><td><span className="badge badge-gold">{l.action}</span></td><td>{l.module}</td><td>{l.time}</td></tr>))}</tbody></table></div>}
