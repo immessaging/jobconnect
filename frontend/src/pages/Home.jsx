@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getJobs, getTestimonials } from '../services/api';
+import { getPlatformStats, getTestimonials } from '../services/api';
 import './Home.css';
 
 function Home() {
-  const [stats, setStats] = useState({ jobs: 0 });
+  const [stats, setStats] = useState({ 
+    active_jobs: 0, 
+    jobs_secured: 0, 
+    verified_agents: 0,
+    total_users: 0 
+  });
   const [testimonials, setTestimonials] = useState([]);
   const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -17,8 +22,14 @@ function Home() {
   ];
 
   useEffect(() => {
-    getJobs().then(res => setStats({ jobs: res.data.count })).catch(console.log);
-    getTestimonials().then(res => setTestimonials(res.data.testimonials || [])).catch(console.log);
+    // Fetch real-time platform stats from database
+    getPlatformStats()
+      .then(res => setStats(res.data.stats))
+      .catch(console.log);
+    
+    getTestimonials()
+      .then(res => setTestimonials(res.data.testimonials || []))
+      .catch(console.log);
     
     const interval = setInterval(() => {
       setCurrentSlide(prev => (prev + 1) % slides.length);
@@ -61,11 +72,28 @@ function Home() {
           ))}
         </div>
 
+        {/* Real-time stats from database */}
         <div className="hero-stats">
-          <div className="stat-card"><span className="stat-icon">💼</span><h3>{stats.jobs}</h3><p>Active Jobs</p></div>
-          <div className="stat-card"><span className="stat-icon">✓</span><h3>100%</h3><p>Verified</p></div>
-          <div className="stat-card"><span className="stat-icon">🔒</span><h3>Secure</h3><p>Escrow Protection</p></div>
-          <div className="stat-card"><span className="stat-icon">🛡️</span><h3>Trusted</h3><p>Transparent Process</p></div>
+          <div className="stat-card">
+            <span className="stat-icon">💼</span>
+            <h3>{stats.active_jobs || 0}</h3>
+            <p>Active Jobs</p>
+          </div>
+          <div className="stat-card">
+            <span className="stat-icon">🎯</span>
+            <h3>{stats.jobs_secured || 0}</h3>
+            <p>Jobs Secured</p>
+          </div>
+          <div className="stat-card">
+            <span className="stat-icon">🔒</span>
+            <h3>Secure</h3>
+            <p>Escrow Protection</p>
+          </div>
+          <div className="stat-card">
+            <span className="stat-icon">🛡️</span>
+            <h3>Trusted</h3>
+            <p>Transparent Process</p>
+          </div>
         </div>
       </section>
 

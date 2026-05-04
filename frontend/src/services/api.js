@@ -60,5 +60,6 @@ export const agentConfirmDispute = (agreementId) => api.post(`/api/commission/${
 // ANALYTICS ENDPOINTS
 // ============================================
 export const getAnalyticsSummary = () => api.get('/api/analytics/summary');
+export const getPlatformStats = () => api.get('/api/stats');
 
 export default api;

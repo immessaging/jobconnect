@@ -238,6 +238,44 @@ def get_testimonials():
         return jsonify({"success": False, "error": str(e)}), 400
 
 # ============================================
+# PLATFORM STATS FOR HOMEPAGE
+# ============================================
+@app.route('/api/stats', methods=['GET'])
+def get_platform_stats():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        stats = {}
+        
+        # Active jobs count
+        cur.execute("SELECT COUNT(*) FROM job_listings WHERE status = 'active'")
+        stats['active_jobs'] = cur.fetchone()[0]
+        
+        # Filled/secured jobs
+        cur.execute("SELECT COUNT(*) FROM job_listings WHERE status = 'filled'")
+        stats['jobs_secured'] = cur.fetchone()[0]
+        
+        # Total users
+        cur.execute("SELECT COUNT(*) FROM users")
+        stats['total_users'] = cur.fetchone()[0]
+        
+        # Verified agents
+        cur.execute("SELECT COUNT(*) FROM users WHERE user_type = 'agent' AND is_verified = true")
+        stats['verified_agents'] = cur.fetchone()[0]
+        
+        # Total commission paid
+        cur.execute("SELECT COALESCE(SUM(commission_amount), 0) FROM commission_agreements WHERE payment_status = 'paid'")
+        stats['total_commission'] = float(cur.fetchone()[0])
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({"success": True, "stats": stats})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# ============================================
 # CONTACT FORM ENDPOINT
 # ============================================
 @app.route('/api/contact', methods=['POST'])
@@ -271,25 +309,15 @@ def submit_verification():
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Update user with verification details
         cur.execute("""
             UPDATE users SET 
                 verification_status = 'pending',
-                nin = %s,
-                bvn = %s,
-                bank_name = %s,
-                account_number = %s,
+                nin = %s, bvn = %s, bank_name = %s, account_number = %s,
                 address = COALESCE(%s, address),
-                guarantor_name = %s,
-                guarantor_phone = %s,
-                guarantor_address = %s,
-                next_of_kin_name = %s,
-                next_of_kin_phone = %s,
-                next_of_kin_address = %s,
-                emergency_contact_name = %s,
-                emergency_contact_phone = %s,
-                social_media_1 = %s,
-                social_media_2 = %s,
+                guarantor_name = %s, guarantor_phone = %s, guarantor_address = %s,
+                next_of_kin_name = %s, next_of_kin_phone = %s, next_of_kin_address = %s,
+                emergency_contact_name = %s, emergency_contact_phone = %s,
+                social_media_1 = %s, social_media_2 = %s,
                 updated_at = NOW()
             WHERE id = %s
         """, (
@@ -299,11 +327,9 @@ def submit_verification():
             data.get('guarantor_address'), data.get('next_of_kin_name'),
             data.get('next_of_kin_phone'), data.get('next_of_kin_address'),
             data.get('emergency_contact_name'), data.get('emergency_contact_phone'),
-            data.get('social_media_1'), data.get('social_media_2'),
-            user_id
+            data.get('social_media_1'), data.get('social_media_2'), user_id
         ))
         
-        # Log activity
         cur.execute("""
             INSERT INTO activity_logs (user_id, user_email, activity_type, 
                 activity_description, module, severity, ip_address)
@@ -312,9 +338,7 @@ def submit_verification():
               f'{user_type} submitted verification documents', request.remote_addr))
         
         conn.commit()
-        cur.close()
-        conn.close()
-        
+        cur.close(); conn.close()
         return jsonify({"success": True, "message": "Verification documents submitted successfully"}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
