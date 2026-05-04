@@ -4,10 +4,7 @@ import './Auth.css';
 
 function SignIn() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -25,27 +22,26 @@ function SignIn() {
     }
 
     setLoading(true);
+    console.log('🔄 LOGIN ATTEMPT:', formData.email); // DEBUG
 
     try {
-      // Add timeout for Render cold start (up to 60 seconds)
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
 
       const response = await fetch('https://jobconnect-api-gjtw.onrender.com/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password
-        }),
+        body: JSON.stringify({ email: formData.email, password: formData.password }),
         signal: controller.signal
       });
       clearTimeout(timeoutId);
       
       const data = await response.json();
+      console.log('✅ LOGIN RESPONSE:', data); // DEBUG
       
       if (data.success) {
         const user = data.user;
+        console.log('👤 USER TYPE:', user.user_type); // DEBUG
         localStorage.setItem('user', JSON.stringify({
           id: user.id,
           email: user.email,
@@ -53,9 +49,10 @@ function SignIn() {
           is_verified: user.is_verified
         }));
 
-        // Redirect based on actual user_type from database
         const userType = user.user_type;
-        if (userType === 'super_admin' || userType === 'admin' || userType === 'admin2' || userType === 'admin1' || userType === 'admin2_70') {
+        console.log('🚀 REDIRECTING TO:', userType); // DEBUG
+        
+        if (userType === 'super_admin' || userType === 'admin' || userType === 'admin2') {
           navigate('/dashboard/admin');
         } else if (userType === 'agent') {
           navigate('/dashboard/agent');
@@ -68,19 +65,11 @@ function SignIn() {
         setError(data.error || 'Invalid email or password');
       }
     } catch (err) {
+      console.log('❌ LOGIN ERROR:', err.name, err.message); // DEBUG
       if (err.name === 'AbortError') {
-        setError('Request timed out. Please try again - the server may be waking up.');
-      } else if (formData.email === 'admin@jobconnect.com' && formData.password === 'admin123') {
-        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'super_admin', adminLevel: 'admin' }));
-        navigate('/dashboard/admin');
-      } else if (formData.email === 'agent1@example.com' && formData.password === 'password123') {
-        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'agent' }));
-        navigate('/dashboard/agent');
-      } else if (formData.email === 'seeker1@example.com' && formData.password === 'password123') {
-        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'job_seeker' }));
-        navigate('/dashboard/seeker');
+        setError('Server waking up... Please try again in 10 seconds.');
       } else {
-        setError('Unable to connect to server. Please check your internet connection and try again.');
+        setError('Network error. Check your connection and try again.');
       }
     }
     setLoading(false);
@@ -104,34 +93,15 @@ function SignIn() {
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label>Email Address</label>
-              <input
-                type="email"
-                name="email"
-                placeholder="your@email.com"
-                value={formData.email}
-                onChange={handleChange}
-                required
-              />
+              <input type="email" name="email" placeholder="your@email.com" value={formData.email} onChange={handleChange} required />
             </div>
-
             <div className="form-group">
               <label>Password</label>
-              <input
-                type="password"
-                name="password"
-                placeholder="Enter your password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-              />
+              <input type="password" name="password" placeholder="Enter your password" value={formData.password} onChange={handleChange} required />
             </div>
-
             <div style={{textAlign: 'right', marginBottom: '15px'}}>
-              <Link to="/reset-password" style={{color: '#d42027', fontSize: '13px', textDecoration: 'none'}}>
-                Forgot Password?
-              </Link>
+              <Link to="/reset-password" style={{color: '#d42027', fontSize: '13px', textDecoration: 'none'}}>Forgot Password?</Link>
             </div>
-
             <button type="submit" className="auth-btn" disabled={loading}>
               {loading ? 'Signing In...' : 'Sign In'}
             </button>
