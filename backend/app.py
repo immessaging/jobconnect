@@ -195,15 +195,23 @@ def login():
         if input_hashed == stored_password:
             return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
         
-        # Try bcrypt
-        try:
-            import bcrypt
-            if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
-                return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
-        except:
-            pass
+        # Try bcrypt with auto-upgrade
+        if stored_password.startswith('$2b$'):
+            try:
+                import bcrypt
+                if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+                    new_hash = hashlib.sha256(password.encode()).hexdigest()
+                    try:
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, str(user[0])))
+                        conn.commit()
+                        cur.close(); conn.close()
+                    except: pass
+                    return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
+            except: pass
         
-        # Try plain text and auto-upgrade to SHA256
+        # Try plain text and auto-upgrade
         if password == stored_password:
             new_hash = hashlib.sha256(password.encode()).hexdigest()
             try:
@@ -211,10 +219,8 @@ def login():
                 cur = conn.cursor()
                 cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, str(user[0])))
                 conn.commit()
-                cur.close()
-                conn.close()
-            except:
-                pass
+                cur.close(); conn.close()
+            except: pass
             return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
         
         return jsonify({"success": False, "error": "Invalid email or password"}), 401
