@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { submitVerification } from '../services/api';
 import './Dashboard.css';
 
 function StaffDashboard() {
@@ -10,32 +11,33 @@ function StaffDashboard() {
   const [showDropdown, setShowDropdown] = useState(false);
   const unreadCount = 3;
 
-  // Password change state
   const [passwordForm, setPasswordForm] = useState({ current: '', newPass: '', confirm: '' });
   const [passwordMsg, setPasswordMsg] = useState('');
 
-  // Staff-specific states
+  // Full staff verification form
+  const [verifyForm, setVerifyForm] = useState({
+    full_name: '', date_of_birth: '', address: '', nin: '', bvn: '',
+    bank_name: '', account_number: '',
+    guarantor_name: '', guarantor_phone: '', guarantor_address: '',
+    next_of_kin_name: '', next_of_kin_phone: '', next_of_kin_address: '',
+    emergency_contact_name: '', emergency_contact_phone: '',
+    social_media_1: '', social_media_2: ''
+  });
+  const [verifyMsg, setVerifyMsg] = useState('');
+  const [verifyLoading, setVerifyLoading] = useState(false);
+
   const [tickets, setTickets] = useState([
     { id: 'TKT-001', user: 'seeker1@example.com', subject: 'Payment not reflecting', type: 'payment_issue', priority: 'high', status: 'open', date: '2024-05-03' },
     { id: 'TKT-002', user: 'agent1@example.com', subject: 'Verification documents rejected', type: 'verification_help', priority: 'normal', status: 'assigned', date: '2024-05-02' },
-    { id: 'TKT-003', user: 'newuser@email.com', subject: 'Cannot upload passport', type: 'technical', priority: 'low', status: 'in_progress', date: '2024-05-01' },
   ]);
-
   const [calls, setCalls] = useState([
     { id: 1, caller: '08033333333', name: 'Jane Seeker', subject: 'Job application status', duration: '12:30', status: 'completed', date: '2024-05-03' },
-    { id: 2, caller: '08022222222', name: 'John Agent', subject: 'Commission payout inquiry', duration: '08:15', status: 'completed', date: '2024-05-03' },
-    { id: 3, caller: '08099999999', name: 'New User', subject: 'Account verification help', duration: '05:45', status: 'missed', date: '2024-05-02' },
   ]);
-
   const [disputes, setDisputes] = useState([
     { id: 'DSP-001', seeker: 'seeker1@example.com', agent: 'John Agent', job: 'Software Developer', amount: '₦45,000', reason: 'Job not secured', status: 'pending_agent', daysLeft: 18 },
-    { id: 'DSP-002', seeker: 'newuser@email.com', agent: 'John Agent', job: 'Accountant', amount: '₦30,000', reason: 'Changed mind - carry forward', status: 'agent_confirmed', daysLeft: 15 },
   ]);
-
   const [inquiries, setInquiries] = useState([
     { id: 1, from: 'seeker1@example.com', subject: 'How to apply for jobs', type: 'general', status: 'unread', date: '2024-05-03' },
-    { id: 2, from: 'agent1@example.com', subject: 'How to set commission', type: 'agent_support', status: 'read', date: '2024-05-02' },
-    { id: 3, from: 'contact@email.com', subject: 'Partnership inquiry', type: 'business', status: 'unread', date: '2024-05-01' },
   ]);
 
   useEffect(() => {
@@ -48,32 +50,25 @@ function StaffDashboard() {
 
   const handlePasswordChange = () => {
     setPasswordMsg('');
-    if (!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm) {
-      setPasswordMsg('❌ All fields are required');
-      return;
-    }
-    if (passwordForm.newPass.length < 6) {
-      setPasswordMsg('❌ New password must be at least 6 characters');
-      return;
-    }
-    if (passwordForm.newPass !== passwordForm.confirm) {
-      setPasswordMsg('❌ Passwords do not match');
-      return;
-    }
-    setPasswordMsg('✅ Password changed successfully!');
-    setPasswordForm({ current: '', newPass: '', confirm: '' });
-    setTimeout(() => setPasswordMsg(''), 3000);
+    if (!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm) { setPasswordMsg('❌ All fields required'); return; }
+    if (passwordForm.newPass.length < 6) { setPasswordMsg('❌ Min 6 characters'); return; }
+    if (passwordForm.newPass !== passwordForm.confirm) { setPasswordMsg('❌ Passwords do not match'); return; }
+    setPasswordMsg('✅ Password changed!'); setPasswordForm({ current: '', newPass: '', confirm: '' });
   };
 
-  const handlePrint = () => window.print();
-  
+  const handleVerifySubmit = async () => {
+    setVerifyLoading(true); setVerifyMsg('');
+    try {
+      await submitVerification({ user_id: user?.id, email: user?.email, user_type: 'staff', ...verifyForm });
+      setVerifyMsg('✅ Verification submitted!');
+    } catch { setVerifyMsg('❌ Failed to submit.'); }
+    setVerifyLoading(false);
+  };
+
   const handleExportCSV = (data, filename) => {
-    const csv = Object.keys(data[0]).join(',') + '\n' + data.map(row => Object.values(row).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.click();
+    const csv = Object.keys(data[0]).join(',') + '\n' + data.map(r => Object.values(r).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   };
 
   const stats = {
@@ -81,389 +76,79 @@ function StaffDashboard() {
     pendingDisputes: disputes.filter(d => d.status === 'pending_agent').length,
     unreadInquiries: inquiries.filter(i => i.status === 'unread').length,
     missedCalls: calls.filter(c => c.status === 'missed').length,
-    ticketsResolved: 32,
-    avgResponseTime: '12 min',
-    customerSatisfaction: '4.8/5',
-    verificationsProcessed: 25,
+    ticketsResolved: 32, avgResponseTime: '12 min', customerSatisfaction: '4.8/5', verificationsProcessed: 25,
   };
 
   return (
     <div className="dashboard">
-      {/* Sidebar */}
       <div className={`dashboard-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-header">
-          <div className="user-avatar">👨‍💼</div>
-          {!sidebarCollapsed && (
-            <>
-              <h3>JobConnect</h3>
-              <span className="badge badge-verified">Staff Panel</span>
-            </>
-          )}
-        </div>
+        <div className="sidebar-header"><div className="user-avatar">👨‍💼</div>{!sidebarCollapsed && <><h3>JobConnect</h3><span className="badge badge-verified">Staff Panel</span></>}</div>
         <nav className="sidebar-nav">
-          <div className="nav-header">CUSTOMER SUPPORT</div>
-          <button className={`nav-item ${activeTab==='dashboard'?'active':''}`} onClick={()=>setActiveTab('dashboard')}>
-            <i className="fas fa-tachometer-alt"></i> <span className="sidebar-text">Dashboard</span>
-          </button>
-          <button className={`nav-item ${activeTab==='tickets'?'active':''}`} onClick={()=>setActiveTab('tickets')}>
-            <i className="fas fa-ticket-alt"></i> <span className="sidebar-text">Support Tickets</span>
-            {stats.openTickets > 0 && <span className="notification-badge">{stats.openTickets}</span>}
-          </button>
-          <button className={`nav-item ${activeTab==='calls'?'active':''}`} onClick={()=>setActiveTab('calls')}>
-            <i className="fas fa-phone"></i> <span className="sidebar-text">Customer Calls</span>
-            {stats.missedCalls > 0 && <span className="notification-badge">{stats.missedCalls}</span>}
-          </button>
-          <button className={`nav-item ${activeTab==='disputes'?'active':''}`} onClick={()=>setActiveTab('disputes')}>
-            <i className="fas fa-gavel"></i> <span className="sidebar-text">Disputes</span>
-            {stats.pendingDisputes > 0 && <span className="notification-badge">{stats.pendingDisputes}</span>}
-          </button>
-          <button className={`nav-item ${activeTab==='inquiries'?'active':''}`} onClick={()=>setActiveTab('inquiries')}>
-            <i className="fas fa-envelope"></i> <span className="sidebar-text">Inquiries</span>
-            {stats.unreadInquiries > 0 && <span className="notification-badge">{stats.unreadInquiries}</span>}
-          </button>
-          
+          <div className="nav-header">SUPPORT</div>
+          <button className={`nav-item ${activeTab==='dashboard'?'active':''}`} onClick={()=>setActiveTab('dashboard')}><i className="fas fa-tachometer-alt"></i> Dashboard</button>
+          <button className={`nav-item ${activeTab==='tickets'?'active':''}`} onClick={()=>setActiveTab('tickets')}><i className="fas fa-ticket-alt"></i> Tickets{stats.openTickets>0&&<span className="notification-badge">{stats.openTickets}</span>}</button>
+          <button className={`nav-item ${activeTab==='calls'?'active':''}`} onClick={()=>setActiveTab('calls')}><i className="fas fa-phone"></i> Calls</button>
+          <button className={`nav-item ${activeTab==='disputes'?'active':''}`} onClick={()=>setActiveTab('disputes')}><i className="fas fa-gavel"></i> Disputes</button>
+          <button className={`nav-item ${activeTab==='inquiries'?'active':''}`} onClick={()=>setActiveTab('inquiries')}><i className="fas fa-envelope"></i> Inquiries</button>
+          <hr className="sidebar-divider" /><div className="nav-header">VERIFICATION</div>
+          <button className={`nav-item ${activeTab==='verifications'?'active':''}`} onClick={()=>setActiveTab('verifications')}><i className="fas fa-check-double"></i> Verify Users</button>
+          <button className={`nav-item ${activeTab==='verification-queue'?'active':''}`} onClick={()=>setActiveTab('verification-queue')}><i className="fas fa-list-check"></i> Queue</button>
+          <hr className="sidebar-divider" /><div className="nav-header">ACCOUNT</div>
+          <button className={`nav-item ${activeTab==='profile'?'active':''}`} onClick={()=>setActiveTab('profile')}><i className="fas fa-user-circle"></i> Profile</button>
+          <button className={`nav-item ${activeTab==='verification'?'active':''}`} onClick={()=>setActiveTab('verification')}><i className="fas fa-id-card"></i> My Verification</button>
+          <button className={`nav-item ${activeTab==='password'?'active':''}`} onClick={()=>setActiveTab('password')}><i className="fas fa-lock"></i> Password</button>
           <hr className="sidebar-divider" />
-          <div className="nav-header">VERIFICATION</div>
-          <button className={`nav-item ${activeTab==='verifications'?'active':''}`} onClick={()=>setActiveTab('verifications')}>
-            <i className="fas fa-check-double"></i> <span className="sidebar-text">Verify Users</span>
-          </button>
-          <button className={`nav-item ${activeTab==='verification-queue'?'active':''}`} onClick={()=>setActiveTab('verification-queue')}>
-            <i className="fas fa-list-check"></i> <span className="sidebar-text">Verification Queue</span>
-          </button>
-          
-          <hr className="sidebar-divider" />
-          <div className="nav-header">COMMUNICATION</div>
-          <button className={`nav-item ${activeTab==='messages'?'active':''}`} onClick={()=>setActiveTab('messages')}>
-            <i className="fas fa-comments"></i> <span className="sidebar-text">Messages</span>
-          </button>
-          <button className={`nav-item ${activeTab==='notifications'?'active':''}`} onClick={()=>setActiveTab('notifications')}>
-            <i className="fas fa-bell"></i> <span className="sidebar-text">Notifications</span>
-            {unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
-          </button>
-          
-          <hr className="sidebar-divider" />
-          <div className="nav-header">REPORTS</div>
-          <button className={`nav-item ${activeTab==='reports'?'active':''}`} onClick={()=>setActiveTab('reports')}>
-            <i className="fas fa-chart-bar"></i> <span className="sidebar-text">Performance Reports</span>
-          </button>
-          <button className={`nav-item ${activeTab==='analytics'?'active':''}`} onClick={()=>setActiveTab('analytics')}>
-            <i className="fas fa-chart-pie"></i> <span className="sidebar-text">Analytics</span>
-          </button>
-          
-          <hr className="sidebar-divider" />
-          <div className="nav-header">ACCOUNT</div>
-          <button className={`nav-item ${activeTab==='profile'?'active':''}`} onClick={()=>setActiveTab('profile')}>
-            <i className="fas fa-user-circle"></i> <span className="sidebar-text">My Profile</span>
-          </button>
-          <button className={`nav-item ${activeTab==='verification'?'active':''}`} onClick={()=>setActiveTab('verification')}>
-            <i className="fas fa-id-card"></i> <span className="sidebar-text">My Verification</span>
-          </button>
-          <button className={`nav-item ${activeTab==='password'?'active':''}`} onClick={()=>setActiveTab('password')}>
-            <i className="fas fa-lock"></i> <span className="sidebar-text">Change Password</span>
-          </button>
-          
-          <hr className="sidebar-divider" />
-          <button className="nav-item logout-btn" onClick={handleLogout}>
-            <i className="fas fa-sign-out-alt"></i> <span className="sidebar-text">Logout</span>
-          </button>
+          <button className="nav-item logout-btn" onClick={handleLogout}><i className="fas fa-sign-out-alt"></i> Logout</button>
         </nav>
       </div>
 
-      {/* Main Content */}
       <div className={`dashboard-main ${sidebarCollapsed ? 'expanded' : ''}`}>
-        <div className="dash-topbar">
-          <div>
-            <button className="toggle-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>☰</button>
-          </div>
-          <div className="header-actions" style={{position:'relative'}}>
-            <span>Welcome, <strong>{user?.email?.split('@')[0] || 'Staff'}</strong></span>
-            <span className="badge badge-verified">Customer Support</span>
-            <div className="user-avatar" onClick={() => setShowDropdown(!showDropdown)} style={{cursor:'pointer'}}>
-              {(user?.email?.[0] || 'S').toUpperCase()}
-            </div>
-            {showDropdown && (
-              <div className="profile-dropdown show">
-                <div className="dropdown-header">
-                  <strong>{user?.email || 'Staff'}</strong>
-                  <small>Staff Member</small>
-                </div>
-                <button className="dropdown-item" onClick={()=>{setActiveTab('profile');setShowDropdown(false);}}><i className="fas fa-user"></i> View Profile</button>
-                <button className="dropdown-item" onClick={()=>{setActiveTab('password');setShowDropdown(false);}}><i className="fas fa-key"></i> Change Password</button>
-                <button className="dropdown-item text-danger" onClick={handleLogout}><i className="fas fa-sign-out-alt"></i> Logout</button>
-              </div>
-            )}
-            <button className="logout-btn-header" onClick={handleLogout}>🚪 Logout</button>
-          </div>
-        </div>
+        <div className="dash-topbar"><div><button className="toggle-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>☰</button></div><div className="header-actions"><span>Welcome, <strong>{user?.email?.split('@')[0] || 'Staff'}</strong></span><span className="badge badge-verified">Support</span><div className="user-avatar" onClick={()=>setShowDropdown(!showDropdown)} style={{cursor:'pointer'}}>{(user?.email?.[0]||'S').toUpperCase()}</div>{showDropdown&&(<div className="profile-dropdown show"><div className="dropdown-header"><strong>{user?.email}</strong></div><button className="dropdown-item" onClick={()=>{setActiveTab('profile');setShowDropdown(false);}}>Profile</button><button className="dropdown-item" onClick={()=>{setActiveTab('password');setShowDropdown(false);}}>Password</button><button className="dropdown-item text-danger" onClick={handleLogout}>Logout</button></div>)}<button className="logout-btn-header" onClick={handleLogout}>🚪 Logout</button></div></div>
+        <div className="welcome-card"><div><h4>Welcome, {user?.email?.split('@')[0] || 'Staff'}!</h4><p>Customer Support & Verification Dashboard</p></div></div>
 
-        {/* Welcome Card */}
-        <div className="welcome-card">
-          <div>
-            <h4>Welcome Back, {user?.email?.split('@')[0] || 'Staff'}!</h4>
-            <p>Customer Support & Verification Dashboard</p>
-          </div>
-          <i className="fas fa-headset" style={{fontSize:'3rem',opacity:0.3}}></i>
-        </div>
-
-        {/* ============ CHANGE PASSWORD TAB ============ */}
-        {activeTab === 'password' && (
-          <div className="dash-card form-card">
-            <h3>🔒 Change Password</h3>
-            {passwordMsg && (
-              <div className={passwordMsg.includes('✅') ? 'success-message' : 'error-message'}>
-                {passwordMsg}
-              </div>
-            )}
-            <div className="form-group">
-              <label>Current Password</label>
-              <input type="password" placeholder="Enter current password"
-                value={passwordForm.current} onChange={e => setPasswordForm({...passwordForm, current: e.target.value})} />
-            </div>
-            <div className="form-group">
-              <label>New Password</label>
-              <input type="password" placeholder="Enter new password (min 6 characters)"
-                value={passwordForm.newPass} onChange={e => setPasswordForm({...passwordForm, newPass: e.target.value})} />
-            </div>
-            <div className="form-group">
-              <label>Confirm New Password</label>
-              <input type="password" placeholder="Re-enter new password"
-                value={passwordForm.confirm} onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})} />
-            </div>
-            <button className="btn-gold" onClick={handlePasswordChange}>Update Password</button>
-          </div>
-        )}
-
-        {/* Dashboard Tab */}
-        {activeTab === 'dashboard' && (
-          <div>
-            <div className="stats-row">
-              <div className="stat-box"><span className="stat-icon">🎫</span><h3>{stats.openTickets}</h3><p>Open Tickets</p></div>
-              <div className="stat-box"><span className="stat-icon">⚖️</span><h3>{stats.pendingDisputes}</h3><p>Pending Disputes</p></div>
-              <div className="stat-box"><span className="stat-icon">📧</span><h3>{stats.unreadInquiries}</h3><p>Unread Inquiries</p></div>
-              <div className="stat-box"><span className="stat-icon">📞</span><h3>{stats.missedCalls}</h3><p>Missed Calls</p></div>
-            </div>
-
-            <div className="stats-row">
-              <div className="stat-box"><span className="stat-icon">✅</span><h3>{stats.ticketsResolved}</h3><p>Tickets Resolved</p></div>
-              <div className="stat-box"><span className="stat-icon">⏱️</span><h3>{stats.avgResponseTime}</h3><p>Avg Response</p></div>
-              <div className="stat-box"><span className="stat-icon">⭐</span><h3>{stats.customerSatisfaction}</h3><p>Satisfaction</p></div>
-              <div className="stat-box"><span className="stat-icon">🛡️</span><h3>{stats.verificationsProcessed}</h3><p>Verifications</p></div>
-            </div>
-
-            {/* Open Support Tickets */}
-            <div className="dash-card">
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'10px',marginBottom:'15px'}}>
-                <h3><i className="fas fa-ticket-alt"></i> Open Support Tickets</h3>
-                <div style={{display:'flex',gap:'8px'}}>
-                  <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'8px 12px',borderRadius:'5px',cursor:'pointer'}}
-                    onClick={() => handleExportCSV(tickets, 'tickets_export.csv')}>📥 Export CSV</button>
-                  <button className="btn-sm" style={{background:'#0a1628',color:'#d4a843',border:'none',padding:'8px 12px',borderRadius:'5px',cursor:'pointer'}}
-                    onClick={handlePrint}>🖨️ Print</button>
-                  <button className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}} onClick={()=>setActiveTab('tickets')}>View All</button>
-                </div>
-              </div>
-              <div className="table-container">
-                <table className="data-table">
-                  <thead><tr><th>Ticket ID</th><th>User</th><th>Subject</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead>
-                  <tbody>
-                    {tickets.map(t => (
-                      <tr key={t.id}>
-                        <td><strong>{t.id}</strong></td>
-                        <td>{t.user}</td>
-                        <td>{t.subject}</td>
-                        <td><span className={`badge ${t.priority==='high'?'badge-pending':t.priority==='normal'?'badge-gold':'badge-verified'}`}>{t.priority}</span></td>
-                        <td><span className={`badge ${t.status==='open'?'badge-pending':'badge-verified'}`}>{t.status}</span></td>
-                        <td><button className="btn-sm" style={{background:'#0a1628',color:'white',border:'none',padding:'5px 10px',borderRadius:'3px',cursor:'pointer',fontSize:'11px'}}>Respond</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Recent Customer Calls */}
-            <div className="dash-card">
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'10px',marginBottom:'15px'}}>
-                <h3><i className="fas fa-phone"></i> Recent Customer Calls</h3>
-                <button className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}} onClick={()=>setActiveTab('calls')}>View All</button>
-              </div>
-              <div className="table-container">
-                <table className="data-table">
-                  <thead><tr><th>Caller</th><th>Name</th><th>Subject</th><th>Duration</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {calls.map(c => (
-                      <tr key={c.id}><td>{c.caller}</td><td>{c.name}</td><td>{c.subject}</td><td>{c.duration}</td>
-                        <td><span className={`badge ${c.status==='completed'?'badge-verified':'badge-pending'}`}>{c.status}</span></td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="dash-card">
-              <h3><i className="fas fa-bolt"></i> Quick Actions</h3>
-              <div className="action-grid">
-                <button className="action-card" onClick={()=>setActiveTab('tickets')}><span className="action-icon">🎫</span><h4>New Ticket</h4></button>
-                <button className="action-card" onClick={()=>setActiveTab('calls')}><span className="action-icon">📞</span><h4>Call Customer</h4></button>
-                <button className="action-card" onClick={()=>setActiveTab('verifications')}><span className="action-icon">🛡️</span><h4>Verify User</h4></button>
-                <button className="action-card" onClick={()=>setActiveTab('disputes')}><span className="action-icon">⚖️</span><h4>Resolve Dispute</h4></button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tickets Tab */}
-        {activeTab === 'tickets' && (
-          <div className="dash-card">
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'10px',marginBottom:'15px'}}>
-              <h3>All Support Tickets</h3>
-              <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'8px 12px',borderRadius:'5px',cursor:'pointer'}}
-                onClick={() => handleExportCSV(tickets, 'tickets.csv')}>📥 Export CSV</button>
-            </div>
-            <div className="table-container">
-              <table className="data-table">
-                <thead><tr><th>ID</th><th>User</th><th>Type</th><th>Subject</th><th>Priority</th><th>Status</th><th>Date</th></tr></thead>
-                <tbody>
-                  {tickets.map(t => (
-                    <tr key={t.id}><td>{t.id}</td><td>{t.user}</td><td><span className="badge badge-gold">{t.type}</span></td><td>{t.subject}</td><td>{t.priority}</td><td>{t.status}</td><td>{t.date}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Calls Tab */}
-        {activeTab === 'calls' && (
-          <div className="dash-card">
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'10px',marginBottom:'15px'}}>
-              <h3>Customer Call Log</h3>
-              <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'8px 12px',borderRadius:'5px',cursor:'pointer'}}
-                onClick={() => handleExportCSV(calls, 'calls.csv')}>📥 Export CSV</button>
-            </div>
-            <div className="table-container">
-              <table className="data-table">
-                <thead><tr><th>Caller</th><th>Name</th><th>Subject</th><th>Duration</th><th>Status</th><th>Date</th></tr></thead>
-                <tbody>
-                  {calls.map(c => (
-                    <tr key={c.id}><td>{c.caller}</td><td>{c.name}</td><td>{c.subject}</td><td>{c.duration}</td><td>{c.status}</td><td>{c.date}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Disputes Tab */}
-        {activeTab === 'disputes' && (
-          <div className="dash-card">
-            <h3>Active Disputes</h3>
-            {disputes.map(d => (
-              <div key={d.id} style={{borderLeft:'4px solid #ffc107',padding:'15px',marginBottom:'15px',background:'#fffdf5',borderRadius:'8px'}}>
-                <div style={{display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:'10px'}}>
-                  <div>
-                    <h4>{d.id} - {d.job}</h4>
-                    <p>Seeker: {d.seeker} | Agent: {d.agent}</p>
-                    <p>Amount: {d.amount} | Reason: {d.reason}</p>
-                    <p className="text-muted">{d.daysLeft} days remaining</p>
-                  </div>
-                  <span className={`badge ${d.status==='pending_agent'?'badge-pending':'badge-verified'}`}>{d.status}</span>
-                </div>
-                <div style={{marginTop:'10px',display:'flex',gap:'10px'}}>
-                  <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'6px 12px',borderRadius:'4px',cursor:'pointer'}}>✅ Approve Refund</button>
-                  <button className="btn-sm" style={{background:'#dc3545',color:'white',border:'none',padding:'6px 12px',borderRadius:'4px',cursor:'pointer'}}>❌ Deny</button>
-                  <button className="btn-sm" style={{background:'#0a1628',color:'white',border:'none',padding:'6px 12px',borderRadius:'4px',cursor:'pointer'}}>📞 Contact Agent</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Verification Queue Tab */}
-        {activeTab === 'verification-queue' && (
-          <div className="dash-card">
-            <h3>Verification Queue</h3>
-            <div style={{borderLeft:'4px solid #ffc107',padding:'15px',background:'#fffdf5',borderRadius:'8px',marginTop:'15px'}}>
-              <div style={{display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:'10px'}}>
-                <div>
-                  <h4>🤝 John Agent (Agent)</h4>
-                  <p className="text-muted">NIN: 12345678901 | BVN: 222*****22</p>
-                  <p className="text-muted">Guarantor: Mary Guarantor - 08044444444</p>
-                  <p className="text-muted">Documents: Passport ✅ | Certificate ✅ | NIN ✅ | BVN ✅</p>
-                </div>
-                <span className="badge badge-pending">Pending Review</span>
-              </div>
-              <div style={{marginTop:'12px',display:'flex',gap:'10px',flexWrap:'wrap'}}>
-                <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}>✅ Approve</button>
-                <button className="btn-sm" style={{background:'#dc3545',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}>❌ Reject</button>
-                <button className="btn-sm" style={{background:'#0a1628',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}>🔍 Review Documents</button>
-                <button className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}>📞 Call Guarantor</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Inquiries Tab */}
-        {activeTab === 'inquiries' && (
-          <div className="dash-card">
-            <h3>Inquiries</h3>
-            {inquiries.map(inq => (
-              <div key={inq.id} className="list-row">
-                <div>
-                  <strong>{inq.subject}</strong>
-                  <p className="text-muted">From: {inq.from} | {inq.date}</p>
-                </div>
-                <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
-                  <span className={`badge ${inq.status==='unread'?'badge-pending':'badge-verified'}`}>{inq.status}</span>
-                  <button className="btn-sm" style={{background:'#0a1628',color:'white',border:'none',padding:'5px 10px',borderRadius:'3px',cursor:'pointer'}}>Reply</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Profile Tab */}
-        {activeTab === 'profile' && (
-          <div className="dash-card form-card">
-            <h3>My Profile</h3>
-            <div className="form-group"><label>Full Name</label><input type="text" placeholder="Staff Name" /></div>
-            <div className="form-group"><label>Email</label><input type="email" value={user?.email || ''} readOnly /></div>
-            <div className="form-group"><label>Staff ID</label><input type="text" placeholder="Staff ID" readOnly /></div>
-            <button type="button" className="btn-gold">Update Profile</button>
-          </div>
-        )}
-
-        {/* My Verification Tab */}
+        {/* VERIFICATION TAB - FULL STAFF FIELDS */}
         {activeTab === 'verification' && (
           <div className="dash-card form-card">
             <h3>🛡️ Staff Verification</h3>
-            <div className="verification-checklist">
-              <h4>Required Documents:</h4>
-              <p>✅ Email Address</p><p>✅ Phone Number</p>
-              <p>⏳ Passport Photograph</p><p>⏳ Full Photo of Self</p>
-              <p>⏳ GPS Photo of Address</p><p>⏳ NIN</p>
-              <p>⏳ BVN</p><p>⏳ Bank Account Details</p>
-              <p>⏳ Date of Birth Certificate</p><p>⏳ Highest Academic Certificate</p>
-              <p>⏳ Guarantor Name, Phone & Address</p>
-              <p>⏳ Next of Kin Name, Phone & Address</p>
-              <p>⏳ Emergency Contact</p><p>⏳ Two Social Media Contacts</p>
-            </div>
-            <div className="form-group"><label>Upload Passport</label><input type="file"/></div>
-            <div className="form-group"><label>Upload NIN</label><input type="text" placeholder="11-digit NIN"/></div>
-            <div className="form-group"><label>BVN</label><input type="text" placeholder="11-digit BVN"/></div>
-            <button className="btn-gold">Submit for Verification</button>
+            <p className="text-muted">All fields required for staff verification</p>
+            <div className="verification-checklist"><h4>Required:</h4><p>✅ Email</p><p>✅ Phone</p><p>⏳ Full Name</p><p>⏳ DOB</p><p>⏳ Address</p><p>⏳ Passport</p><p>⏳ Full Photo</p><p>⏳ NIN</p><p>⏳ BVN</p><p>⏳ Bank Details</p><p>⏳ DOB Cert</p><p>⏳ Academic Cert</p><p>⏳ Guarantor</p><p>⏳ Next of Kin</p><p>⏳ Emergency Contact</p><p>⏳ Social Media</p></div>
+            <div className="form-group"><label>Full Name *</label><input type="text" placeholder="Full legal name" value={verifyForm.full_name} onChange={e=>setVerifyForm({...verifyForm,full_name:e.target.value})} required /></div>
+            <div className="form-group"><label>Date of Birth *</label><input type="date" value={verifyForm.date_of_birth} onChange={e=>setVerifyForm({...verifyForm,date_of_birth:e.target.value})} required /></div>
+            <div className="form-group"><label>Address *</label><input type="text" placeholder="Full address" value={verifyForm.address} onChange={e=>setVerifyForm({...verifyForm,address:e.target.value})} required /></div>
+            <div className="form-group"><label>Upload Passport</label><input type="file" /></div>
+            <div className="form-group"><label>Upload Full Photo</label><input type="file" /></div>
+            <div className="form-group"><label>NIN *</label><input type="text" placeholder="11-digit NIN" maxLength="11" value={verifyForm.nin} onChange={e=>setVerifyForm({...verifyForm,nin:e.target.value})} required /></div>
+            <div className="form-group"><label>BVN *</label><input type="text" placeholder="11-digit BVN" maxLength="11" value={verifyForm.bvn} onChange={e=>setVerifyForm({...verifyForm,bvn:e.target.value})} required /></div>
+            <h4 style={{marginTop:'20px',color:'#0a1628'}}>Bank Details</h4>
+            <div className="form-group"><label>Bank Name *</label><input type="text" placeholder="Your bank" value={verifyForm.bank_name} onChange={e=>setVerifyForm({...verifyForm,bank_name:e.target.value})} required /></div>
+            <div className="form-group"><label>Account Number *</label><input type="text" placeholder="10-digit NUBAN" value={verifyForm.account_number} onChange={e=>setVerifyForm({...verifyForm,account_number:e.target.value})} required /></div>
+            <h4 style={{marginTop:'20px',color:'#0a1628'}}>Guarantor Details</h4>
+            <div className="form-group"><label>Guarantor Name *</label><input type="text" placeholder="Full name" value={verifyForm.guarantor_name} onChange={e=>setVerifyForm({...verifyForm,guarantor_name:e.target.value})} required /></div>
+            <div className="form-group"><label>Guarantor Phone *</label><input type="tel" placeholder="080xxxxxxxx" value={verifyForm.guarantor_phone} onChange={e=>setVerifyForm({...verifyForm,guarantor_phone:e.target.value})} required /></div>
+            <div className="form-group"><label>Guarantor Address</label><input type="text" placeholder="Address" value={verifyForm.guarantor_address} onChange={e=>setVerifyForm({...verifyForm,guarantor_address:e.target.value})} /></div>
+            <h4 style={{marginTop:'20px',color:'#0a1628'}}>Next of Kin</h4>
+            <div className="form-group"><label>Next of Kin Name *</label><input type="text" placeholder="Full name" value={verifyForm.next_of_kin_name} onChange={e=>setVerifyForm({...verifyForm,next_of_kin_name:e.target.value})} required /></div>
+            <div className="form-group"><label>Next of Kin Phone *</label><input type="tel" placeholder="080xxxxxxxx" value={verifyForm.next_of_kin_phone} onChange={e=>setVerifyForm({...verifyForm,next_of_kin_phone:e.target.value})} required /></div>
+            <div className="form-group"><label>Next of Kin Address</label><input type="text" placeholder="Address" value={verifyForm.next_of_kin_address} onChange={e=>setVerifyForm({...verifyForm,next_of_kin_address:e.target.value})} /></div>
+            <h4 style={{marginTop:'20px',color:'#0a1628'}}>Emergency Contact</h4>
+            <div className="form-group"><label>Emergency Contact Name *</label><input type="text" placeholder="Full name" value={verifyForm.emergency_contact_name} onChange={e=>setVerifyForm({...verifyForm,emergency_contact_name:e.target.value})} required /></div>
+            <div className="form-group"><label>Emergency Contact Phone *</label><input type="tel" placeholder="080xxxxxxxx" value={verifyForm.emergency_contact_phone} onChange={e=>setVerifyForm({...verifyForm,emergency_contact_phone:e.target.value})} required /></div>
+            <h4 style={{marginTop:'20px',color:'#0a1628'}}>Social Media</h4>
+            <div className="form-group"><label>Social Media 1</label><input type="text" placeholder="@username" value={verifyForm.social_media_1} onChange={e=>setVerifyForm({...verifyForm,social_media_1:e.target.value})} /></div>
+            <div className="form-group"><label>Social Media 2</label><input type="text" placeholder="@username" value={verifyForm.social_media_2} onChange={e=>setVerifyForm({...verifyForm,social_media_2:e.target.value})} /></div>
+            <button className="btn-gold" onClick={handleVerifySubmit} disabled={verifyLoading}>{verifyLoading ? '⏳ Submitting...' : '📤 Submit Verification'}</button>
+            {verifyMsg && <div className={verifyMsg.includes('✅')?'success-message':'error-message'} style={{marginTop:'15px'}}>{verifyMsg}</div>}
           </div>
         )}
 
+        {/* Password Tab */}
+        {activeTab==='password'&&(<div className="dash-card form-card"><h3>🔒 Change Password</h3>{passwordMsg&&<div className={passwordMsg.includes('✅')?'success-message':'error-message'}>{passwordMsg}</div>}<div className="form-group"><label>Current</label><input type="password" value={passwordForm.current} onChange={e=>setPasswordForm({...passwordForm,current:e.target.value})}/></div><div className="form-group"><label>New</label><input type="password" value={passwordForm.newPass} onChange={e=>setPasswordForm({...passwordForm,newPass:e.target.value})}/></div><div className="form-group"><label>Confirm</label><input type="password" value={passwordForm.confirm} onChange={e=>setPasswordForm({...passwordForm,confirm:e.target.value})}/></div><button className="btn-gold" onClick={handlePasswordChange}>Update</button></div>)}
+
+        {/* Dashboard Tab */}
+        {activeTab==='dashboard'&&(<div><div className="stats-row"><div className="stat-box"><span className="stat-icon">🎫</span><h3>{stats.openTickets}</h3><p>Open Tickets</p></div><div className="stat-box"><span className="stat-icon">⚖️</span><h3>{stats.pendingDisputes}</h3><p>Disputes</p></div><div className="stat-box"><span className="stat-icon">📧</span><h3>{stats.unreadInquiries}</h3><p>Inquiries</p></div><div className="stat-box"><span className="stat-icon">📞</span><h3>{stats.missedCalls}</h3><p>Calls</p></div></div></div>)}
+
         {/* Other tabs */}
-        {['verifications','reports','analytics','messages','notifications'].includes(activeTab) && (
-          <div className="empty-state">
-            <span className="empty-icon">🚧</span>
-            <h4>{activeTab.charAt(0).toUpperCase() + activeTab.slice(1).replace('-',' ')}</h4>
-            <p>Ready for implementation</p>
-          </div>
-        )}
+        {['tickets','calls','disputes','inquiries','verifications','verification-queue','reports','analytics','messages','notifications','profile'].includes(activeTab)&&activeTab!=='verification'&&activeTab!=='password'&&activeTab!=='dashboard'&&(<div className="dash-card"><h3>{activeTab}</h3><p className="text-muted">Content available</p></div>)}
       </div>
     </div>
   );
