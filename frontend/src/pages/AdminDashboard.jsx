@@ -194,7 +194,7 @@ const handleVerifyAction = async (userId, action) => {
     totalUsers: users.length,
     activeJobs: jobs.filter(j => j.status === 'active').length,
     totalJobs: jobs.length,
-    pendingVerifications: 1,
+    pendingVerifications: pendingUsers.length,
     platformRevenue: '₦0',
     totalTransactions: 0,
     totalAgents: users.filter(u => u.type === 'agent').length,
