@@ -160,9 +160,15 @@ const [pendingUsers, setPendingUsers] = useState([]);
   };
   // Load pending verifications
 const loadVerifications = () => {
+  console.log('🔍 Loading verifications...');
   getVerifications()
-    .then(res => setPendingUsers(res.data.users || []))
-    .catch(console.log);
+    .then(res => {
+      console.log('✅ Verifications loaded:', res.data.users?.length, 'users');
+      setPendingUsers(res.data.users || []);
+    })
+    .catch(err => {
+      console.log('❌ Verifications error:', err);
+    });
 };
 
 // Approve or reject verification
