@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAgentJobs, postJob, submitVerification } from '../services/api';
+import { getAgentJobs, postJob, submitVerification, uploadToCloudinary } from '../services/api';
 import './Dashboard.css';
-import { submitVerification, uploadToCloudinary } from '../services/api';
+
 
 function AgentDashboard() {
   const navigate = useNavigate();
