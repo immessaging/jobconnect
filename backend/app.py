@@ -379,9 +379,6 @@ def contact_form():
         return jsonify({"success": False, "error": str(e)}), 400
 
 # ============================================
-# SUBMIT VERIFICATION DOCUMENTS (Per User Type)
-# ============================================
-# ============================================
 # SUBMIT VERIFICATION (Per User Type)
 # ============================================
 @app.route('/api/verify/submit', methods=['POST'])
@@ -861,7 +858,34 @@ def get_analytics_summary():
         return jsonify({"success": True, "stats": stats})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
-
+# ============================================
+# GET AGENT PROFILE BY USER ID
+# ============================================
+@app.route('/api/agent/profile/<user_id>', methods=['GET'])
+def get_agent_profile(user_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT id, full_name, verification_status
+            FROM agent_profiles WHERE user_id = %s
+        """, (user_id,))
+        
+        profile = cur.fetchone()
+        cur.close(); conn.close()
+        
+        if profile:
+            return jsonify({
+                "success": True,
+                "profile_id": str(profile[0]),
+                "full_name": profile[1],
+                "verification_status": profile[2]
+            }), 200
+        else:
+            return jsonify({"success": False, "error": "No agent profile found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 # ============================================
 # RUN APPLICATION
 # ============================================

@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { getAgentJobs, postJob, submitVerification, uploadToCloudinary } from '../services/api';
 import './Dashboard.css';
 
-
 function AgentDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [user, setUser] = useState(null);
+  const [agentProfileId, setAgentProfileId] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showLocationOverlay, setShowLocationOverlay] = useState(true);
   const [gpsCoords, setGpsCoords] = useState(null);
@@ -22,7 +22,6 @@ function AgentDashboard() {
   const [passwordForm, setPasswordForm] = useState({ current: '', newPass: '', confirm: '' });
   const [passwordMsg, setPasswordMsg] = useState('');
 
-  // Full agent verification form
   const [verifyForm, setVerifyForm] = useState({
     full_name: '', date_of_birth: '', address: '', nin: '', bvn: '',
     bank_name: '', account_number: '',
@@ -37,7 +36,7 @@ function AgentDashboard() {
   const [commissionPercent, setCommissionPercent] = useState(15);
   const [isNegotiable, setIsNegotiable] = useState(true);
   const [form, setForm] = useState({ 
-    agent_id:'00000000-0000-0000-0000-000000000010', 
+    agent_id: '',
     job_title:'', qualification_requirements:'', experience_requirements:'', 
     required_skills:'', salary_range_min:'', salary_range_max:'',
     organization_name:'', organization_contact_person:'',
@@ -49,72 +48,90 @@ function AgentDashboard() {
   const [totalEarned, setTotalEarned] = useState(0);
   const [nextPayout, setNextPayout] = useState('');
 
-  const [agentDisputes, setAgentDisputes] = useState([
-    { id: 'DSP-001', seeker: 'seeker1@example.com', job: 'Software Developer', amount: '₦45,000', reason: 'Job not secured', status: 'pending_agent', daysLeft: 18 },
-  ]);
+  const [agentDisputes, setAgentDisputes] = useState([]);
+  const [applications, setApplications] = useState([]);
+  const [agentMessages, setAgentMessages] = useState([]);
 
-  const [applications, setApplications] = useState([
-    { id: 1, seeker: 'seeker1@example.com', job: 'Software Developer', date: '2024-05-03', status: 'pending' },
-  ]);
-
-  const [agentMessages, setAgentMessages] = useState([
-    { id: 1, from: 'admin@jobconnect.com', subject: 'Verification Update', message: 'Your documents are being reviewed', time: '2 hours ago', unread: true },
-  ]);
+  // Fetch agent profile ID from backend
+  const fetchAgentProfileId = async (userId) => {
+    try {
+      const API = 'https://jobconnect-api-gjtw.onrender.com';
+      const response = await fetch(`${API}/api/agent/profile/${userId}`);
+      const data = await response.json();
+      if (data.success && data.profile_id) {
+        setAgentProfileId(data.profile_id);
+        setForm(prev => ({ ...prev, agent_id: data.profile_id }));
+        return data.profile_id;
+      }
+    } catch (err) {
+      console.log('Error fetching agent profile:', err);
+    }
+    return null;
+  };
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (!userData) { navigate('/signin'); return; }
-    setUser(JSON.parse(userData));
-    loadJobs();
+    const parsedUser = JSON.parse(userData);
+    setUser(parsedUser);
+    
+    // Fetch agent profile ID dynamically
+    fetchAgentProfileId(parsedUser.id).then(profileId => {
+      if (profileId) {
+        loadJobs(profileId);
+      }
+    });
+    
     loadEarnings();
     setTimeout(() => requestLocationAccess(), 1000);
     calculateNextPayout();
   }, [navigate]);
 
-  const loadJobs = () => {
-    getAgentJobs('00000000-0000-0000-0000-000000000010')
+  const loadJobs = (profileId) => {
+    const id = profileId || agentProfileId;
+    if (!id) return;
+    getAgentJobs(id)
       .then(res => setJobs(res.data.jobs || [])).catch(console.log);
   };
+
   const loadEarnings = () => {
     const saved = JSON.parse(localStorage.getItem('agentEarnings') || '[]');
     setEarnings(saved); setTotalEarned(saved.reduce((s, e) => s + (e.amount || 0), 0));
   };
+
   const calculateNextPayout = () => {
     const now = new Date();
     let payout = new Date(now.getFullYear(), now.getMonth(), 25);
     if (now > payout) payout = new Date(now.getFullYear(), now.getMonth() + 1, 25);
     setNextPayout(payout.toLocaleDateString('en-NG', { weekday:'long', year:'numeric', month:'long', day:'numeric' }));
   };
+
   const handleLogout = () => { localStorage.removeItem('user'); navigate('/signin'); };
   const formatNaira = (num) => '₦' + Number(num).toLocaleString();
 
   const handleVerifySubmit = async () => {
-  setVerifyLoading(true); setVerifyMsg('');
-  try {
-    // Upload files
-    let passportUrl = '', photoUrl = '';
-    const files = document.querySelectorAll('input[type=file]');
-    if (files[0]?.files[0]) passportUrl = await uploadToCloudinary(files[0].files[0]);
-    if (files[1]?.files[0]) photoUrl = await uploadToCloudinary(files[1].files[0]);
-    
-    await submitVerification({
-      user_id: user?.id, email: user?.email, user_type: 'agent',
-      passport_photo: passportUrl,
-      government_id_photo: photoUrl,
-      ...verifyForm
-    });
-    setVerifyMsg('✅ Verification submitted! Our team will review within 24-48 hours.');
-  } catch { setVerifyMsg('❌ Failed to submit.'); }
-  setVerifyLoading(false);
-
+    setVerifyLoading(true); setVerifyMsg('');
+    try {
+      let passportUrl = '', photoUrl = '';
+      const files = document.querySelectorAll('input[type=file]');
+      if (files[0]?.files[0]) passportUrl = await uploadToCloudinary(files[0].files[0]);
+      if (files[1]?.files[0]) photoUrl = await uploadToCloudinary(files[1].files[0]);
+      await submitVerification({
+        user_id: user?.id, email: user?.email, user_type: 'agent',
+        passport_photo: passportUrl, government_id_photo: photoUrl, ...verifyForm
+      });
+      setVerifyMsg('✅ Verification submitted! Review takes 24-48 hours.');
+    } catch { setVerifyMsg('❌ Failed to submit.'); }
+    setVerifyLoading(false);
   };
 
   const handlePost = async (e) => {
     e.preventDefault(); setMsg('');
+    if (!agentProfileId) { setMsg('❌ Agent profile not found. Please complete verification first.'); return; }
     try {
-      await postJob({ ...form, commission_percentage: commissionPercent, is_negotiable: isNegotiable });
+      await postJob({ ...form, agent_id: agentProfileId, commission_percentage: commissionPercent, is_negotiable: isNegotiable });
       setMsg('✅ Job posted! Commission: ' + commissionPercent + '% ' + (isNegotiable ? '(Negotiable)' : '(Fixed)'));
-      loadJobs();
+      loadJobs(agentProfileId);
       setForm({...form, job_title:'', qualification_requirements:'', experience_requirements:'', required_skills:'', salary_range_min:'', salary_range_max:'', organization_name:'', organization_contact_person:'', organization_email:'', organization_phone:''});
     } catch { setMsg('❌ Failed to post job'); }
   };
@@ -135,12 +152,12 @@ function AgentDashboard() {
     setPasswordMsg('✅ Password changed!'); setPasswordForm({ current: '', newPass: '', confirm: '' });
   };
 
-  const handleConfirmDispute = (id, confirmed) => {
-    setAgentDisputes(prev => prev.map(d => d.id === id ? { ...d, status: confirmed ? 'confirmed' : 'denied' } : d));
-    alert(confirmed ? '✅ Confirmed' : '❌ Denied');
+  const stats = { 
+    activeListings: jobs.filter(j => j.status === 'active').length, 
+    filledJobs: jobs.filter(j => j.status === 'filled').length, 
+    totalApplications: jobs.reduce((s, j) => s + (j.applications || 0), 0), 
+    totalCommissionEarned: totalEarned 
   };
-
-  const stats = { activeListings: jobs.filter(j => j.status === 'active').length, filledJobs: jobs.filter(j => j.status === 'filled').length, totalApplications: jobs.reduce((s, j) => s + (j.applications || 0), 0), totalCommissionEarned: totalEarned };
 
   return (
     <div className="dashboard">
@@ -173,35 +190,16 @@ function AgentDashboard() {
         <div className="dash-topbar"><div><button className="toggle-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>☰</button></div><div className="header-actions">{isVerified ? <span className="badge badge-verified">Verified</span> : <span className="badge badge-pending">Unverified</span>}<button className="logout-btn-header" onClick={handleLogout}>🚪 Logout</button></div></div>
         {gpsCoords && <div className="geo-info">📍 {locationDisplay}</div>}
         {!isVerified && (<div className="verification-warning"><h3>⚠️ NOT VERIFIED</h3><p><strong>Complete verification to access all features.</strong></p><button className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}} onClick={()=>setActiveTab('verification')}>Complete Verification Now</button></div>)}
+        {!agentProfileId && user?.user_type === 'agent' && (<div className="verification-warning"><h3>⚠️ AGENT PROFILE NOT FOUND</h3><p>Please complete verification to create your agent profile.</p></div>)}
         <div className="welcome-card"><div><h4>Welcome, {user?.email?.split('@')[0] || 'Agent'}!</h4></div></div>
         {msg && <div className={msg.includes('✅')?'success-message':'error-message'}>{msg}</div>}
-       {/* Show uploaded documents */}
-{user?.passport_photo && (
-  <div className="dash-card">
-    <h3>📸 Uploaded Documents</h3>
-    <div style={{display:'flex',gap:'15px',flexWrap:'wrap',marginTop:'10px'}}>
-      {user.passport_photo && (
-        <div>
-          <p><strong>Passport Photo:</strong></p>
-          <img src={user.passport_photo} alt="Passport" style={{width:'150px',borderRadius:'8px',border:'2px solid #d4a843'}} />
-        </div>
-      )}
-      {user.government_id_photo && (
-        <div>
-          <p><strong>Government ID:</strong></p>
-          <img src={user.government_id_photo} alt="ID" style={{width:'150px',borderRadius:'8px',border:'2px solid #d4a843'}} />
-        </div>
-      )}
-    </div>
-  </div>
-)}
-        {/* VERIFICATION TAB - FULL AGENT FIELDS */}
+
+        {/* VERIFICATION TAB */}
         {activeTab === 'verification' && (
           <div className="dash-card form-card">
             <h3>🛡️ Agent Verification</h3>
             <p className="text-muted">All fields required for agent verification</p>
-            <div className="verification-checklist"><h4>Required:</h4><p>✅ Email</p><p>✅ Phone</p><p>⏳ Full Name</p><p>⏳ DOB</p><p>⏳ Address</p><p>⏳ Passport</p><p>⏳ Full Photo</p><p>⏳ NIN</p><p>⏳ BVN</p><p>⏳ Bank Details</p><p>⏳ DOB Cert</p><p>⏳ Academic Cert</p><p>⏳ Guarantor</p><p>⏳ Next of Kin</p><p>⏳ Emergency Contact</p><p>⏳ Social Media</p></div>
-            
+            <div className="verification-checklist"><h4>Required:</h4><p>✅ Email</p><p>✅ Phone</p><p>⏳ Full Name</p><p>⏳ DOB</p><p>⏳ Address</p><p>⏳ Passport</p><p>⏳ Full Photo</p><p>⏳ NIN</p><p>⏳ BVN</p><p>⏳ Bank Details</p><p>⏳ Guarantor</p><p>⏳ Next of Kin</p><p>⏳ Emergency Contact</p><p>⏳ Social Media</p></div>
             <div className="form-group"><label>Full Name *</label><input type="text" placeholder="Full legal name" value={verifyForm.full_name} onChange={e=>setVerifyForm({...verifyForm,full_name:e.target.value})} required /></div>
             <div className="form-group"><label>Date of Birth *</label><input type="date" value={verifyForm.date_of_birth} onChange={e=>setVerifyForm({...verifyForm,date_of_birth:e.target.value})} required /></div>
             <div className="form-group"><label>Address *</label><input type="text" placeholder="Full address" value={verifyForm.address} onChange={e=>setVerifyForm({...verifyForm,address:e.target.value})} required /></div>
@@ -210,23 +208,22 @@ function AgentDashboard() {
             <div className="form-group"><label>NIN *</label><input type="text" placeholder="11-digit NIN" maxLength="11" value={verifyForm.nin} onChange={e=>setVerifyForm({...verifyForm,nin:e.target.value})} required /></div>
             <div className="form-group"><label>BVN *</label><input type="text" placeholder="11-digit BVN" maxLength="11" value={verifyForm.bvn} onChange={e=>setVerifyForm({...verifyForm,bvn:e.target.value})} required /></div>
             <h4 style={{marginTop:'20px',color:'#0a1628'}}>Bank Details</h4>
-            <div className="form-group"><label>Bank Name *</label><input type="text" placeholder="Your bank" value={verifyForm.bank_name} onChange={e=>setVerifyForm({...verifyForm,bank_name:e.target.value})} required /></div>
-            <div className="form-group"><label>Account Number *</label><input type="text" placeholder="10-digit NUBAN" value={verifyForm.account_number} onChange={e=>setVerifyForm({...verifyForm,account_number:e.target.value})} required /></div>
+            <div className="form-group"><label>Bank Name *</label><input type="text" value={verifyForm.bank_name} onChange={e=>setVerifyForm({...verifyForm,bank_name:e.target.value})} required /></div>
+            <div className="form-group"><label>Account Number *</label><input type="text" value={verifyForm.account_number} onChange={e=>setVerifyForm({...verifyForm,account_number:e.target.value})} required /></div>
             <h4 style={{marginTop:'20px',color:'#0a1628'}}>Guarantor Details</h4>
-            <div className="form-group"><label>Guarantor Name *</label><input type="text" placeholder="Full name" value={verifyForm.guarantor_name} onChange={e=>setVerifyForm({...verifyForm,guarantor_name:e.target.value})} required /></div>
-            <div className="form-group"><label>Guarantor Phone *</label><input type="tel" placeholder="080xxxxxxxx" value={verifyForm.guarantor_phone} onChange={e=>setVerifyForm({...verifyForm,guarantor_phone:e.target.value})} required /></div>
-            <div className="form-group"><label>Guarantor Address</label><input type="text" placeholder="Address" value={verifyForm.guarantor_address} onChange={e=>setVerifyForm({...verifyForm,guarantor_address:e.target.value})} /></div>
+            <div className="form-group"><label>Guarantor Name *</label><input type="text" value={verifyForm.guarantor_name} onChange={e=>setVerifyForm({...verifyForm,guarantor_name:e.target.value})} required /></div>
+            <div className="form-group"><label>Guarantor Phone *</label><input type="tel" value={verifyForm.guarantor_phone} onChange={e=>setVerifyForm({...verifyForm,guarantor_phone:e.target.value})} required /></div>
+            <div className="form-group"><label>Guarantor Address</label><input type="text" value={verifyForm.guarantor_address} onChange={e=>setVerifyForm({...verifyForm,guarantor_address:e.target.value})} /></div>
             <h4 style={{marginTop:'20px',color:'#0a1628'}}>Next of Kin</h4>
-            <div className="form-group"><label>Next of Kin Name *</label><input type="text" placeholder="Full name" value={verifyForm.next_of_kin_name} onChange={e=>setVerifyForm({...verifyForm,next_of_kin_name:e.target.value})} required /></div>
-            <div className="form-group"><label>Next of Kin Phone *</label><input type="tel" placeholder="080xxxxxxxx" value={verifyForm.next_of_kin_phone} onChange={e=>setVerifyForm({...verifyForm,next_of_kin_phone:e.target.value})} required /></div>
-            <div className="form-group"><label>Next of Kin Address</label><input type="text" placeholder="Address" value={verifyForm.next_of_kin_address} onChange={e=>setVerifyForm({...verifyForm,next_of_kin_address:e.target.value})} /></div>
+            <div className="form-group"><label>Next of Kin Name *</label><input type="text" value={verifyForm.next_of_kin_name} onChange={e=>setVerifyForm({...verifyForm,next_of_kin_name:e.target.value})} required /></div>
+            <div className="form-group"><label>Next of Kin Phone *</label><input type="tel" value={verifyForm.next_of_kin_phone} onChange={e=>setVerifyForm({...verifyForm,next_of_kin_phone:e.target.value})} required /></div>
+            <div className="form-group"><label>Next of Kin Address</label><input type="text" value={verifyForm.next_of_kin_address} onChange={e=>setVerifyForm({...verifyForm,next_of_kin_address:e.target.value})} /></div>
             <h4 style={{marginTop:'20px',color:'#0a1628'}}>Emergency Contact</h4>
-            <div className="form-group"><label>Emergency Contact Name *</label><input type="text" placeholder="Full name" value={verifyForm.emergency_contact_name} onChange={e=>setVerifyForm({...verifyForm,emergency_contact_name:e.target.value})} required /></div>
-            <div className="form-group"><label>Emergency Contact Phone *</label><input type="tel" placeholder="080xxxxxxxx" value={verifyForm.emergency_contact_phone} onChange={e=>setVerifyForm({...verifyForm,emergency_contact_phone:e.target.value})} required /></div>
+            <div className="form-group"><label>Emergency Contact Name *</label><input type="text" value={verifyForm.emergency_contact_name} onChange={e=>setVerifyForm({...verifyForm,emergency_contact_name:e.target.value})} required /></div>
+            <div className="form-group"><label>Emergency Contact Phone *</label><input type="tel" value={verifyForm.emergency_contact_phone} onChange={e=>setVerifyForm({...verifyForm,emergency_contact_phone:e.target.value})} required /></div>
             <h4 style={{marginTop:'20px',color:'#0a1628'}}>Social Media</h4>
-            <div className="form-group"><label>Social Media 1</label><input type="text" placeholder="@username" value={verifyForm.social_media_1} onChange={e=>setVerifyForm({...verifyForm,social_media_1:e.target.value})} /></div>
-            <div className="form-group"><label>Social Media 2</label><input type="text" placeholder="@username" value={verifyForm.social_media_2} onChange={e=>setVerifyForm({...verifyForm,social_media_2:e.target.value})} /></div>
-            
+            <div className="form-group"><label>Social Media 1</label><input type="text" value={verifyForm.social_media_1} onChange={e=>setVerifyForm({...verifyForm,social_media_1:e.target.value})} /></div>
+            <div className="form-group"><label>Social Media 2</label><input type="text" value={verifyForm.social_media_2} onChange={e=>setVerifyForm({...verifyForm,social_media_2:e.target.value})} /></div>
             <button className="btn-gold" onClick={handleVerifySubmit} disabled={verifyLoading}>{verifyLoading ? '⏳ Submitting...' : '📤 Submit Verification'}</button>
             {verifyMsg && <div className={verifyMsg.includes('✅')?'success-message':'error-message'} style={{marginTop:'15px'}}>{verifyMsg}</div>}
           </div>
@@ -238,14 +235,34 @@ function AgentDashboard() {
         {/* Dashboard Tab */}
         {activeTab==='dashboard'&&(<div><div className="stats-row"><div className="stat-box"><span className="stat-icon">💼</span><h3>{stats.activeListings}</h3><p>Active</p></div><div className="stat-box"><span className="stat-icon">✅</span><h3>{stats.filledJobs}</h3><p>Filled</p></div><div className="stat-box"><span className="stat-icon">👥</span><h3>{stats.totalApplications}</h3><p>Applicants</p></div><div className="stat-box"><span className="stat-icon">💰</span><h3>{formatNaira(stats.totalCommissionEarned)}</h3><p>Earned</p></div></div><div className="dash-card"><h3>Next Payout: {nextPayout}</h3></div></div>)}
 
+        {/* My Jobs Tab */}
+        {activeTab==='jobs'&&(
+          <div className="dash-card">
+            <h3>My Jobs</h3>
+            {jobs.length===0 ? <p className="text-muted">No jobs posted yet.</p> :
+              <div className="grid-2">
+                {jobs.map(job=>(
+                  <div key={job.id} className="card" style={{borderLeft:'4px solid #d4a843',padding:'15px'}}>
+                    <h4>{job.title}</h4>
+                    <p className="text-muted">🏢 {job.organization}</p>
+                    <p className="salary">{formatNaira(job.salary_min)} - {formatNaira(job.salary_max)}</p>
+                    <p>👥 {job.applications || 0} applications</p>
+                    <span className={`badge ${job.status==='active'?'badge-verified':'badge-pending'}`}>{job.status}</span>
+                  </div>
+                ))}
+              </div>
+            }
+          </div>
+        )}
+
         {/* Post Job Tab */}
         {activeTab==='post'&&(<div className="dash-card form-card"><h3>Post New Job</h3><form onSubmit={handlePost}><div className="form-group"><label>Job Title *</label><input value={form.job_title} onChange={e=>setForm({...form,job_title:e.target.value})} required/></div><div className="form-group"><label>Organization *</label><input value={form.organization_name} onChange={e=>setForm({...form,organization_name:e.target.value})} required/></div><div className="form-group"><label>Qualification *</label><textarea value={form.qualification_requirements} onChange={e=>setForm({...form,qualification_requirements:e.target.value})} required/></div><div className="form-group"><label>Experience *</label><textarea value={form.experience_requirements} onChange={e=>setForm({...form,experience_requirements:e.target.value})} required/></div><div className="form-row"><div className="form-group"><label>Min Salary (₦)</label><input type="number" value={form.salary_range_min} onChange={e=>setForm({...form,salary_range_min:e.target.value})}/></div><div className="form-group"><label>Max Salary (₦)</label><input type="number" value={form.salary_range_max} onChange={e=>setForm({...form,salary_range_max:e.target.value})}/></div></div><div className="commission-setting-card"><h4>💰 Commission</h4><div className="form-group"><label>% (5-35)</label><input type="number" min="5" max="35" value={commissionPercent} onChange={e=>setCommissionPercent(Number(e.target.value))}/></div><div><label>🔄 Negotiable</label><input type="radio" checked={isNegotiable} onChange={()=>setIsNegotiable(true)}/> <label>🔒 Fixed</label><input type="radio" checked={!isNegotiable} onChange={()=>setIsNegotiable(false)}/></div></div><button type="submit" className="btn-gold">📢 Post Job ({commissionPercent}%)</button></form></div>)}
 
         {/* Other tabs */}
-        {['jobs','applications','disputes','earnings','payout','profile','messages','notifications','prep'].includes(activeTab)&&activeTab!=='verification'&&activeTab!=='password'&&activeTab!=='post'&&activeTab!=='dashboard'&&(<div className="dash-card"><h3>{activeTab}</h3><p className="text-muted">Content available</p></div>)}
+        {['applications','disputes','earnings','payout','profile','messages','notifications','prep'].includes(activeTab)&&activeTab!=='verification'&&activeTab!=='password'&&activeTab!=='post'&&activeTab!=='dashboard'&&activeTab!=='jobs'&&(<div className="dash-card"><h3>{activeTab}</h3><p className="text-muted">Content available</p></div>)}
       </div>
     </div>
   );
 }
 
-export default AgentDashboard;// force-deploy-fix-agent-id 
+export default AgentDashboard;
