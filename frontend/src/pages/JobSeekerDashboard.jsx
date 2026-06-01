@@ -65,19 +65,11 @@ function JobSeekerDashboard() {
   };
 
   const handleVerifySubmit = async () => {
-    setVerifyLoading(true);
-    setVerifyMsg('');
+    setVerifyLoading(true); setVerifyMsg('');
     try {
-      await submitVerification({
-        user_id: user?.id,
-        email: user?.email,
-        user_type: 'job_seeker',
-        ...verifyForm
-      });
+      await submitVerification({ user_id: user?.id, email: user?.email, user_type: 'job_seeker', ...verifyForm });
       setVerifyMsg('✅ Verification submitted! Our team will review within 24-48 hours.');
-    } catch (err) {
-      setVerifyMsg('❌ Failed to submit. Please try again.');
-    }
+    } catch { setVerifyMsg('❌ Failed to submit. Please try again.'); }
     setVerifyLoading(false);
   };
 
@@ -177,13 +169,12 @@ function JobSeekerDashboard() {
 
         <div className="welcome-card"><div><h4>Welcome Back, {user?.email?.split('@')[0] || 'Seeker'}!</h4><p>Here's your job search overview.</p></div><i className="fas fa-search" style={{fontSize:'3rem',opacity:0.3}}></i></div>
 
-        {/* VERIFICATION TAB - FULL FIELDS */}
+        {/* VERIFICATION TAB */}
         {activeTab === 'verification' && (
           <div className="dash-card form-card">
             <h3>🛡️ Account Verification</h3>
             <p className="text-muted">Complete all fields to verify your account</p>
             <div className="verification-checklist"><h4>Required:</h4><p>✅ Email</p><p>✅ Phone</p><p>⏳ Full Name</p><p>⏳ DOB</p><p>⏳ Address</p><p>⏳ NIN (Optional)</p><p>⏳ Passport</p><p>⏳ Full Photo</p><p>⏳ Next of Kin</p><p>⏳ Emergency Contact</p><p>⏳ Social Media</p></div>
-            
             <div className="form-group"><label>Full Name *</label><input type="text" placeholder="Your full legal name" value={verifyForm.full_name} onChange={e => setVerifyForm({...verifyForm, full_name: e.target.value})} required /></div>
             <div className="form-group"><label>Date of Birth *</label><input type="date" value={verifyForm.date_of_birth} onChange={e => setVerifyForm({...verifyForm, date_of_birth: e.target.value})} required /></div>
             <div className="form-group"><label>Address *</label><input type="text" placeholder="Your full residential address" value={verifyForm.address} onChange={e => setVerifyForm({...verifyForm, address: e.target.value})} required /></div>
@@ -200,16 +191,41 @@ function JobSeekerDashboard() {
             <h4 style={{marginTop:'20px',color:'#0a1628'}}>Social Media</h4>
             <div className="form-group"><label>Social Media 1</label><input type="text" placeholder="@username" value={verifyForm.social_media_1} onChange={e => setVerifyForm({...verifyForm, social_media_1: e.target.value})} /></div>
             <div className="form-group"><label>Social Media 2</label><input type="text" placeholder="@username" value={verifyForm.social_media_2} onChange={e => setVerifyForm({...verifyForm, social_media_2: e.target.value})} /></div>
-            
             <button className="btn-gold" onClick={handleVerifySubmit} disabled={verifyLoading}>{verifyLoading ? '⏳ Submitting...' : '📤 Submit Verification'}</button>
             {verifyMsg && <div className={verifyMsg.includes('✅') ? 'success-message' : 'error-message'} style={{marginTop:'15px'}}>{verifyMsg}</div>}
           </div>
         )}
 
+        {/* Password Tab */}
         {activeTab === 'password' && (<div className="dash-card form-card"><h3>🔒 Change Password</h3>{passwordMsg && <div className={passwordMsg.includes('✅')?'success-message':'error-message'}>{passwordMsg}</div>}<div className="form-group"><label>Current Password</label><input type="password" value={passwordForm.current} onChange={e=>setPasswordForm({...passwordForm,current:e.target.value})}/></div><div className="form-group"><label>New Password</label><input type="password" value={passwordForm.newPass} onChange={e=>setPasswordForm({...passwordForm,newPass:e.target.value})}/></div><div className="form-group"><label>Confirm Password</label><input type="password" value={passwordForm.confirm} onChange={e=>setPasswordForm({...passwordForm,confirm:e.target.value})}/></div><button className="btn-gold" onClick={handlePasswordChange}>Update Password</button></div>)}
 
+        {/* Dashboard Tab */}
         {activeTab==='dashboard'&&(<div><div className="stats-row"><div className="stat-box"><span className="stat-icon">💼</span><h3>{stats.availableJobs}</h3><p>Available Jobs</p></div><div className="stat-box"><span className="stat-icon">📝</span><h3>{stats.applied}</h3><p>Applied</p></div><div className="stat-box"><span className="stat-icon">✅</span><h3>{stats.accepted}</h3><p>Accepted</p></div><div className="stat-box"><span className="stat-icon">💰</span><h3>{formatNaira(stats.totalPaid)}</h3><p>Paid</p></div></div></div>)}
-        {['messages','notifications','jobs','applied','release','dispute','profile','edit-profile','agreements','payments'].includes(activeTab) && activeTab!=='verification' && activeTab!=='password' && activeTab!=='dashboard' && (<div className="dash-card"><h3>{activeTab}</h3><p className="text-muted">Content available</p></div>)}
+
+        {/* Find Jobs Tab */}
+        {activeTab==='jobs'&&(
+          <div className="dash-card">
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:'15px'}}>
+              <h3>Available Jobs</h3>
+              <Link to="/jobs" className="btn-sm" style={{background:'#d4a843',color:'#0a1628',textDecoration:'none',padding:'8px 16px',borderRadius:'5px',fontWeight:'bold'}}>Browse All</Link>
+            </div>
+            {jobs.length===0 ? <p className="text-muted">No jobs available yet. Check back soon!</p> :
+              <div className="grid-2">
+                {jobs.map(job=>(
+                  <div key={job.id} className="card" style={{borderLeft:'4px solid #d4a843',padding:'15px'}}>
+                    <h4>{job.title}</h4>
+                    <p className="text-muted">📋 {job.qualification}</p>
+                    <p className="salary">{formatNaira(job.salary_min)} - {formatNaira(job.salary_max)}</p>
+                    <Link to={`/jobs/${job.id}`} className="btn-sm btn-red" style={{textDecoration:'none',marginTop:'10px',display:'inline-block'}}>View & Apply</Link>
+                  </div>
+                ))}
+              </div>
+            }
+          </div>
+        )}
+
+        {/* Other tabs */}
+        {['messages','notifications','applied','release','dispute','profile','edit-profile','agreements','payments'].includes(activeTab) && activeTab!=='verification' && activeTab!=='password' && activeTab!=='dashboard' && activeTab!=='jobs' && (<div className="dash-card"><h3>{activeTab.charAt(0).toUpperCase()+activeTab.slice(1)}</h3><p className="text-muted">Content available</p></div>)}
       </div>
     </div>
   );

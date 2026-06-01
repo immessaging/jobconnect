@@ -3,6 +3,8 @@ from flask_cors import CORS
 import psycopg2
 import os
 import json
+import requests
+import uuid
 from dotenv import load_dotenv
 from datetime import datetime
 import sendgrid
@@ -884,6 +886,306 @@ def get_agent_profile(user_id):
             }), 200
         else:
             return jsonify({"success": False, "error": "No agent profile found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    # ============================================
+# KYC PROVIDER CONFIGURATION (Dojah/Identitypass)
+# ============================================
+KYC_API_KEY = os.environ.get('KYC_API_KEY', '')  # Set in Render env vars
+KYC_BASE_URL = 'https://api.identitypass.com/api/v1'
+KYC_HEADERS = {
+    'Authorization': f'Bearer {KYC_API_KEY}',
+    'Content-Type': 'application/json',
+    'x-api-key': KYC_API_KEY
+}
+
+# ============================================
+# COST TRACKING FOR KYC CHECKS
+# ============================================
+KYC_COSTS = {
+    'bvn': 150,      # ₦150 per BVN check
+    'vnin': 100,     # ₦100 per vNIN check
+    'address': 2000  # ₦2,000 per address verification
+}
+
+# ============================================
+# VERIFY BVN
+# ============================================
+@app.route('/api/kyc/verify-bvn', methods=['POST'])
+def verify_bvn():
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        bvn = data.get('bvn')
+        first_name = data.get('first_name', '')
+        last_name = data.get('last_name', '')
+        
+        if not bvn or len(bvn) != 11:
+            return jsonify({"success": False, "error": "Invalid BVN. Must be 11 digits."}), 400
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Call KYC provider API
+        response = requests.post(
+            f'{KYC_BASE_URL}/bvn/verify',
+            json={"bvn": bvn},
+            headers=KYC_HEADERS,
+            timeout=30
+        )
+        
+        kyc_data = response.json()
+        
+        if response.status_code == 200 and kyc_data.get('status') == 'success':
+            kyc_info = kyc_data.get('data', {})
+            
+            # Name matching logic
+            provider_first = kyc_info.get('first_name', '').lower()
+            provider_last = kyc_info.get('last_name', '').lower()
+            
+            name_match = (
+                provider_first == first_name.lower() and 
+                provider_last == last_name.lower()
+            )
+            
+            if name_match:
+                # Update user as BVN verified
+                cur.execute("""
+                    UPDATE users SET 
+                        bvn_verified = TRUE,
+                        bvn = %s,
+                        kyc_status = CASE WHEN nin_verified THEN 'approved' ELSE 'in_progress' END,
+                        kyc_reference = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, (bvn, kyc_info.get('reference', str(uuid.uuid4())), user_id))
+                
+                conn.commit()
+                cur.close(); conn.close()
+                
+                return jsonify({
+                    "success": True,
+                    "message": "BVN verified successfully! Name matches records.",
+                    "name_match": True,
+                    "cost": KYC_COSTS['bvn']
+                }), 200
+            else:
+                cur.close(); conn.close()
+                return jsonify({
+                    "success": False,
+                    "error": "Name mismatch. BVN does not match provided name.",
+                    "name_match": False,
+                    "cost": KYC_COSTS['bvn']
+                }), 400
+        else:
+            cur.close(); conn.close()
+            return jsonify({
+                "success": False,
+                "error": "BVN verification failed. Please check the number and try again.",
+                "cost": 0
+            }), 400
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+# ============================================
+# VERIFY VIRTUAL NIN (vNIN)
+# ============================================
+@app.route('/api/kyc/verify-vnin', methods=['POST'])
+def verify_vnin():
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        vnin = data.get('vnin')
+        
+        if not vnin:
+            return jsonify({"success": False, "error": "Virtual NIN is required"}), 400
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Call KYC provider API for vNIN
+        response = requests.post(
+            f'{KYC_BASE_URL}/nin/verify',
+            json={"vnin": vnin},
+            headers=KYC_HEADERS,
+            timeout=30
+        )
+        
+        kyc_data = response.json()
+        
+        if response.status_code == 200 and kyc_data.get('status') == 'success':
+            # Update user as NIN verified
+            cur.execute("""
+                UPDATE users SET 
+                    nin_verified = TRUE,
+                    vnin = %s,
+                    kyc_status = CASE WHEN bvn_verified THEN 'approved' ELSE 'in_progress' END,
+                    kyc_reference = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (vnin, kyc_data.get('reference', str(uuid.uuid4())), user_id))
+            
+            conn.commit()
+            cur.close(); conn.close()
+            
+            return jsonify({
+                "success": True,
+                "message": "NIN verified successfully!",
+                "cost": KYC_COSTS['vnin']
+            }), 200
+        else:
+            cur.close(); conn.close()
+            return jsonify({
+                "success": False,
+                "error": "vNIN verification failed. Please generate a new vNIN and try again.",
+                "cost": 0
+            }), 400
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+# ============================================
+# UPLOAD UTILITY BILL FOR ADDRESS VERIFICATION
+# ============================================
+@app.route('/api/kyc/upload-utility-bill', methods=['POST'])
+def upload_utility_bill():
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        bill_url = data.get('bill_url')  # URL from Cloudinary upload
+        
+        if not bill_url:
+            return jsonify({"success": False, "error": "Utility bill upload required"}), 400
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Save utility bill URL
+        cur.execute("""
+            UPDATE users SET 
+                utility_bill_url = %s,
+                address_verified = TRUE,
+                kyc_status = CASE 
+                    WHEN bvn_verified AND nin_verified THEN 'approved' 
+                    ELSE 'in_progress' 
+                END,
+                updated_at = NOW()
+            WHERE id = %s
+        """, (bill_url, user_id))
+        
+        conn.commit()
+        cur.close(); conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "Utility bill uploaded. Address verification pending admin review.",
+            "cost": KYC_COSTS['address']
+        }), 200
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+# ============================================
+# GET KYC STATUS
+# ============================================
+@app.route('/api/kyc/status/<user_id>', methods=['GET'])
+def get_kyc_status(user_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT 
+                bvn_verified, nin_verified, address_verified,
+                kyc_status, kyc_reference, vnin, utility_bill_url,
+                bvn, nin
+            FROM users WHERE id = %s
+        """, (user_id,))
+        
+        user = cur.fetchone()
+        cur.close(); conn.close()
+        
+        if not user:
+            return jsonify({"success": False, "error": "User not found"}), 404
+        
+        return jsonify({
+            "success": True,
+            "kyc": {
+                "bvn_verified": user[0],
+                "nin_verified": user[1],
+                "address_verified": user[2],
+                "kyc_status": user[3],
+                "kyc_reference": user[4],
+                "vnin": user[5],
+                "utility_bill_url": user[6],
+                "bvn": user[7],
+                "nin": user[8]
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+# ============================================
+# ENFORCE KYC CHECK ON JOB POSTING
+# ============================================
+@app.route('/api/agent/post-job', methods=['POST'])
+def post_job_with_kyc():
+    try:
+        data = request.json
+        agent_id = data.get('agent_id')
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check KYC status before allowing job post
+        cur.execute("SELECT kyc_status, bvn_verified, nin_verified FROM users WHERE id = %s", (agent_id,))
+        user = cur.fetchone()
+        
+        if not user or user[0] != 'approved':
+            cur.close(); conn.close()
+            return jsonify({
+                "success": False,
+                "error": "Complete KYC verification before posting jobs.",
+                "kyc_required": True
+            }), 403
+        
+        # Proceed with job posting (existing logic)
+        cur.execute("""
+            INSERT INTO job_listings (
+                agent_id, job_title, qualification_requirements,
+                experience_requirements, required_skills,
+                salary_range_min, salary_range_max, salary_type,
+                organization_name, organization_contact_person,
+                organization_email, organization_phone,
+                commission_percentage, is_negotiable,
+                has_interview, has_exam, status
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'active')
+            RETURNING id
+        """, (
+            agent_id, data['job_title'], data['qualification_requirements'],
+            data['experience_requirements'], data.get('required_skills', ''),
+            data['salary_range_min'], data['salary_range_max'],
+            data.get('salary_type', 'monthly'), data['organization_name'],
+            data.get('organization_contact_person', ''), data.get('organization_email', ''),
+            data.get('organization_phone', ''),
+            data.get('commission_percentage', 15),
+            data.get('is_negotiable', True),
+            data.get('has_interview', False),
+            data.get('has_exam', False)
+        ))
+        
+        job_id = cur.fetchone()[0]
+        conn.commit()
+        cur.close(); conn.close()
+        
+        return jsonify({"success": True, "message": "Job posted", "job_id": str(job_id)}), 201
+        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 # ============================================

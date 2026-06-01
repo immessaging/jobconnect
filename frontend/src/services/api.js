@@ -67,6 +67,12 @@ export const submitVerification = (data) => api.post('/api/verify/submit', data)
 
 export const getVerifications = () => api.get('/api/admin/verifications');
 export const verifyUser = (userId, action) => api.post(`/api/admin/verify/${userId}`, { action });
+
+// KYC Verification
+export const verifyBVN = (data) => api.post('/api/kyc/verify-bvn', data);
+export const verifyVNIN = (data) => api.post('/api/kyc/verify-vnin', data);
+export const uploadUtilityBill = (data) => api.post('/api/kyc/upload-utility-bill', data);
+export const getKYCStatus = (userId) => api.get(`/api/kyc/status/${userId}`);
 // ============================================
 // CLOUDINARY FILE UPLOAD
 // ============================================
