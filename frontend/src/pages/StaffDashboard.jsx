@@ -39,7 +39,38 @@ function StaffDashboard() {
   const [inquiries, setInquiries] = useState([
     { id: 1, from: 'seeker1@example.com', subject: 'How to apply for jobs', type: 'general', status: 'unread', date: '2024-05-03' },
   ]);
+  const [staffMessages, setStaffMessages] = useState([
+    { id: 1, from: 'admin@jobconnect.com', subject: 'New Verification Assignment', message: 'You have 3 new agents to verify. Please review their documents.', time: '1 hour ago', unread: true },
+    { id: 2, from: 'agent1@example.com', subject: 'Document Upload Issue', message: 'I cannot upload my NIN document. Can you help?', time: '3 hours ago', unread: false },
+    { id: 3, from: 'seeker1@example.com', subject: 'Account Help', message: 'I need help completing my profile verification.', time: 'Yesterday', unread: true },
+  ]);
+  const [staffChatMessages, setStaffChatMessages] = useState([]);
+  const [staffChatInput, setStaffChatInput] = useState('');
+  const [selectedStaffContact, setSelectedStaffContact] = useState('');
+  const [staffCallTarget, setStaffCallTarget] = useState('');
+  const [showStaffCall, setShowStaffCall] = useState(false);
+  const [staffNoticeBoard, setStaffNoticeBoard] = useState([
+    { id: 1, title: 'Verification Targets', content: 'All pending verifications must be completed within 48 hours.', priority: 'urgent', date: '2024-06-01' },
+    { id: 2, title: 'Team Meeting', content: 'Weekly team meeting every Monday at 9AM via video call.', priority: 'normal', date: '2024-05-30' },
+  ]);
+    const handleStaffSendChat = () => {
+    if (!staffChatInput.trim()) return;
+    setStaffChatMessages([...staffChatMessages, { id: Date.now(), sender: 'staff', text: staffChatInput, time: new Date().toLocaleTimeString(), isStaff: true }]);
+    setStaffChatInput('');
+  };
 
+  const handleStaffReplyMessage = (from) => {
+    const reply = prompt(`Reply to ${from}:`);
+    if (reply) alert(`✅ Reply sent to ${from}`);
+  };
+
+  const handleStaffStartCall = () => {
+    if (!staffCallTarget) { alert('Select who to call'); return; }
+    setShowStaffCall(true);
+    const roomUrl = `https://meet.jit.si/JobConnect-Staff-${Date.now()}`;
+    navigator.clipboard?.writeText(roomUrl);
+    alert(`📋 Room link copied! Share with ${staffCallTarget} to join.\n\n${roomUrl}`);
+  };
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (!userData) { navigate('/signin'); return; }
@@ -98,6 +129,11 @@ function StaffDashboard() {
           <button className={`nav-item ${activeTab==='verification'?'active':''}`} onClick={()=>setActiveTab('verification')}><i className="fas fa-id-card"></i> My Verification</button>
           <button className={`nav-item ${activeTab==='password'?'active':''}`} onClick={()=>setActiveTab('password')}><i className="fas fa-lock"></i> Password</button>
           <hr className="sidebar-divider" />
+          <hr className="sidebar-divider" /><div className="nav-header">COMMUNICATION</div>
+<button className={`nav-item ${activeTab==='staff-messages'?'active':''}`} onClick={()=>setActiveTab('staff-messages')}><i className="fas fa-envelope"></i> <span className="sidebar-text">Messages</span>{staffMessages.filter(m=>m.unread).length>0&&<span className="notification-badge">{staffMessages.filter(m=>m.unread).length}</span>}</button>
+<button className={`nav-item ${activeTab==='staff-chat'?'active':''}`} onClick={()=>setActiveTab('staff-chat')}><i className="fas fa-comments"></i> <span className="sidebar-text">Live Chat</span></button>
+<button className={`nav-item ${activeTab==='staff-calls'?'active':''}`} onClick={()=>setActiveTab('staff-calls')}><i className="fas fa-phone"></i> <span className="sidebar-text">Make Calls</span></button>
+<button className={`nav-item ${activeTab==='staff-noticeboard'?'active':''}`} onClick={()=>setActiveTab('staff-noticeboard')}><i className="fas fa-clipboard-list"></i> <span className="sidebar-text">Notice Board</span></button>
           <button className="nav-item logout-btn" onClick={handleLogout}><i className="fas fa-sign-out-alt"></i> Logout</button>
         </nav>
       </div>
@@ -140,7 +176,90 @@ function StaffDashboard() {
             {verifyMsg && <div className={verifyMsg.includes('✅')?'success-message':'error-message'} style={{marginTop:'15px'}}>{verifyMsg}</div>}
           </div>
         )}
+{/* Staff Messages Tab */}
+{activeTab==='staff-messages'&&(
+  <div className="dash-card">
+    <h3><i className="fas fa-envelope"></i> Messages</h3>
+    <div className="table-container"><table className="data-table"><thead><tr><th>From</th><th>Subject</th><th>Message</th><th>Time</th><th>Action</th></tr></thead><tbody>
+      {staffMessages.map(m=>(
+        <tr key={m.id} style={{background:m.unread?'#f0f7ff':'transparent',fontWeight:m.unread?'bold':'normal'}}>
+          <td>{m.from}</td><td>{m.subject}</td><td>{m.message?.substring(0,40)}...</td><td>{m.time}</td>
+          <td><button className="btn-sm" style={{background:'#0a1628',color:'white',border:'none',padding:'5px 10px',borderRadius:'3px',cursor:'pointer'}} onClick={()=>handleStaffReplyMessage(m.from)}>Reply</button></td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  </div>
+)}
 
+{/* Staff Live Chat Tab */}
+{activeTab==='staff-chat'&&(
+  <div className="dash-card" style={{display:'flex',flexDirection:'column',height:'60vh'}}>
+    <h3><i className="fas fa-comments"></i> Live Chat</h3>
+    <div style={{display:'flex',gap:'10px',marginBottom:'15px'}}>
+      <select value={selectedStaffContact} onChange={e=>setSelectedStaffContact(e.target.value)} style={{padding:'8px',borderRadius:'5px',border:'2px solid #e0e0e0',flex:1}}>
+        <option value="">Select contact...</option>
+        <option value="Admin">Admin</option>
+        <option value="Agent">Agents</option>
+        <option value="Seeker">Job Seekers</option>
+      </select>
+    </div>
+    <div style={{flex:1,overflowY:'auto',border:'1px solid #e0e0e0',borderRadius:'8px',padding:'15px',marginBottom:'15px',background:'#f9f9f9'}}>
+      {staffChatMessages.length===0?<p className="text-muted" style={{textAlign:'center'}}>Start a conversation</p>:
+        staffChatMessages.map(m=>(
+          <div key={m.id} style={{textAlign:m.isStaff?'right':'left',marginBottom:'12px'}}>
+            <div style={{display:'inline-block',background:m.isStaff?'#0a1628':'white',color:m.isStaff?'white':'#333',padding:'10px 15px',borderRadius:'12px',maxWidth:'70%'}}>
+              <p style={{margin:0,fontSize:'14px'}}>{m.text}</p><small style={{opacity:0.7,fontSize:'10px'}}>{m.time}</small>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+    <div style={{display:'flex',gap:'10px'}}>
+      <input type="text" value={staffChatInput} onChange={e=>setStaffChatInput(e.target.value)} onKeyPress={e=>e.key==='Enter'&&handleStaffSendChat()} placeholder="Type message..." style={{flex:1,padding:'12px',border:'2px solid #e0e0e0',borderRadius:'8px'}}/>
+      <button onClick={handleStaffSendChat} className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'12px 20px',borderRadius:'8px',cursor:'pointer',fontWeight:'bold'}}>Send</button>
+    </div>
+  </div>
+)}
+
+{/* Staff Calls Tab */}
+{activeTab==='staff-calls'&&(
+  <div className="dash-card">
+    <h3><i className="fas fa-phone"></i> Make a Call</h3>
+    <div style={{display:'flex',gap:'10px',marginBottom:'20px'}}>
+      <select value={staffCallTarget} onChange={e=>setStaffCallTarget(e.target.value)} style={{padding:'10px',borderRadius:'5px',border:'2px solid #e0e0e0',flex:1}}>
+        <option value="">Select who to call...</option>
+        <option value="Admin">Admin</option>
+        <option value="Agent">Agent</option>
+        <option value="Seeker">Job Seeker</option>
+      </select>
+      <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}} onClick={handleStaffStartCall}>📹 Video Call</button>
+      <button className="btn-sm" style={{background:'#0a1628',color:'#d4a843',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}} onClick={handleStaffStartCall}>📞 Voice Call</button>
+    </div>
+    {showStaffCall&&(
+      <div style={{marginTop:'15px'}}>
+        <button className="btn btn-red" style={{marginBottom:'10px'}} onClick={()=>setShowStaffCall(false)}>❌ End Call</button>
+        <iframe src={`https://meet.jit.si/JobConnect-Staff-${Date.now()}`} style={{width:'100%',height:'400px',border:'none',borderRadius:'10px'}} allow="camera; microphone; fullscreen"/>
+      </div>
+    )}
+  </div>
+)}
+
+{/* Staff Notice Board Tab */}
+{activeTab==='staff-noticeboard'&&(
+  <div className="dash-card">
+    <h3><i className="fas fa-clipboard-list"></i> Notice Board & Broadcasts</h3>
+    {staffNoticeBoard.map(n=>(
+      <div key={n.id} style={{borderLeft:'4px solid '+(n.priority==='urgent'?'#dc3545':n.priority==='high'?'#ffc107':'#d4a843'),padding:'15px',marginBottom:'12px',background:n.priority==='urgent'?'#fff5f5':'white',borderRadius:'8px'}}>
+        <div style={{display:'flex',justifyContent:'space-between'}}>
+          <h4>{n.title}</h4>
+          <span className={`badge ${n.priority==='urgent'?'badge-pending':n.priority==='high'?'badge-gold':'badge-verified'}`}>{n.priority}</span>
+        </div>
+        <p className="text-muted">{n.content}</p>
+        <small>{n.date}</small>
+      </div>
+    ))}
+  </div>
+)}
         {/* Password Tab */}
         {activeTab==='password'&&(<div className="dash-card form-card"><h3>🔒 Change Password</h3>{passwordMsg&&<div className={passwordMsg.includes('✅')?'success-message':'error-message'}>{passwordMsg}</div>}<div className="form-group"><label>Current</label><input type="password" value={passwordForm.current} onChange={e=>setPasswordForm({...passwordForm,current:e.target.value})}/></div><div className="form-group"><label>New</label><input type="password" value={passwordForm.newPass} onChange={e=>setPasswordForm({...passwordForm,newPass:e.target.value})}/></div><div className="form-group"><label>Confirm</label><input type="password" value={passwordForm.confirm} onChange={e=>setPasswordForm({...passwordForm,confirm:e.target.value})}/></div><button className="btn-gold" onClick={handlePasswordChange}>Update</button></div>)}
 

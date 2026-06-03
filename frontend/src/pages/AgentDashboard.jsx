@@ -50,8 +50,35 @@ function AgentDashboard() {
 
   const [agentDisputes, setAgentDisputes] = useState([]);
   const [applications, setApplications] = useState([]);
-  const [agentMessages, setAgentMessages] = useState([]);
+  
+const [agentChatMessages, setAgentChatMessages] = useState([]);
+const [agentChatInput, setAgentChatInput] = useState('');
+const [selectedChatContact, setSelectedChatContact] = useState('');
+const [agentCallTarget, setAgentCallTarget] = useState('');
+const [agentNoticeBoard, setAgentNoticeBoard] = useState([
+  { id: 1, title: 'System Maintenance', content: 'Scheduled maintenance on May 5th, 2AM-4AM WAT', priority: 'high', date: '2024-05-03' },
+  { id: 2, title: 'New Feature: Video Meetings', content: 'Video meetings now available', priority: 'normal', date: '2024-05-01' },
+]);
+const [showAgentCall, setShowAgentCall] = useState(false);
 
+const handleAgentSendChat = () => {
+  if (!agentChatInput.trim()) return;
+  setAgentChatMessages([...agentChatMessages, { id: Date.now(), sender: 'agent', text: agentChatInput, time: new Date().toLocaleTimeString(), isAgent: true }]);
+  setAgentChatInput('');
+};
+
+const handleReplyMessage = (from) => {
+  const reply = prompt(`Reply to ${from}:`);
+  if (reply) alert(`✅ Reply sent to ${from}`);
+};
+
+const handleStartCall = () => {
+  if (!agentCallTarget) { alert('Select a user to call'); return; }
+  setShowAgentCall(true);
+  const roomUrl = `https://meet.jit.si/JobConnect-Agent-${Date.now()}`;
+  navigator.clipboard?.writeText(roomUrl);
+  alert(`📋 Room link copied! Share with ${agentCallTarget} to join.\n\n${roomUrl}`);
+};
   // Fetch agent profile ID from backend
   const fetchAgentProfileId = async (userId) => {
     try {
@@ -182,6 +209,11 @@ function AgentDashboard() {
           <button className={`nav-item ${activeTab==='profile'?'active':''}`} onClick={()=>setActiveTab('profile')}><i className="fas fa-user-circle"></i> Profile</button>
           <button className={`nav-item ${activeTab==='password'?'active':''}`} onClick={()=>setActiveTab('password')}><i className="fas fa-lock"></i> Password</button>
           <hr className="sidebar-divider" />
+          <hr className="sidebar-divider" /><div className="nav-header">COMMUNICATION</div>
+<button className={`nav-item ${activeTab==='agent-messages'?'active':''}`} onClick={()=>setActiveTab('agent-messages')}><i className="fas fa-envelope"></i> <span className="sidebar-text">Messages</span></button>
+<button className={`nav-item ${activeTab==='agent-chat'?'active':''}`} onClick={()=>setActiveTab('agent-chat')}><i className="fas fa-comments"></i> <span className="sidebar-text">Live Chat</span></button>
+<button className={`nav-item ${activeTab==='agent-calls'?'active':''}`} onClick={()=>setActiveTab('agent-calls')}><i className="fas fa-phone"></i> <span className="sidebar-text">Calls</span></button>
+<button className={`nav-item ${activeTab==='agent-noticeboard'?'active':''}`} onClick={()=>setActiveTab('agent-noticeboard')}><i className="fas fa-clipboard-list"></i> <span className="sidebar-text">Notice Board</span></button>
           <button className="nav-item logout-btn" onClick={handleLogout}><i className="fas fa-sign-out-alt"></i> Logout</button>
         </nav>
       </div>
@@ -228,7 +260,92 @@ function AgentDashboard() {
             {verifyMsg && <div className={verifyMsg.includes('✅')?'success-message':'error-message'} style={{marginTop:'15px'}}>{verifyMsg}</div>}
           </div>
         )}
+{/* Agent Messages Tab */}
+{activeTab==='agent-messages'&&(
+  <div className="dash-card">
+    <h3><i className="fas fa-envelope"></i> Messages</h3>
+    <div className="table-container">
+      <table className="data-table">
+        <thead><tr><th>From</th><th>Subject</th><th>Message</th><th>Time</th><th>Action</th></tr></thead>
+        <tbody>
+          {agentMessages.map(m=>(
+            <tr key={m.id} style={{background:m.unread?'#f0f7ff':'transparent',fontWeight:m.unread?'bold':'normal'}}>
+              <td>{m.from}</td><td>{m.subject}</td><td>{m.message?.substring(0,40)}...</td><td>{m.time}</td>
+              <td><button className="btn-sm" style={{background:'#0a1628',color:'white',border:'none',padding:'5px 10px',borderRadius:'3px',cursor:'pointer'}} onClick={()=>handleReplyMessage(m.from)}>Reply</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
 
+{/* Agent Live Chat Tab */}
+{activeTab==='agent-chat'&&(
+  <div className="dash-card" style={{display:'flex',flexDirection:'column',height:'60vh'}}>
+    <h3><i className="fas fa-comments"></i> Live Chat</h3>
+    <div style={{display:'flex',gap:'10px',marginBottom:'15px'}}>
+      <select value={selectedChatContact} onChange={e=>setSelectedChatContact(e.target.value)} style={{padding:'8px',borderRadius:'5px',border:'2px solid #e0e0e0',flex:1}}>
+        <option value="">Select contact...</option>
+        <option value="admin">Admin</option>
+        <option value="support">Support</option>
+      </select>
+    </div>
+    <div style={{flex:1,overflowY:'auto',border:'1px solid #e0e0e0',borderRadius:'8px',padding:'15px',marginBottom:'15px',background:'#f9f9f9'}}>
+      {agentChatMessages.map(m=>(
+        <div key={m.id} style={{textAlign:m.isAgent?'right':'left',marginBottom:'12px'}}>
+          <div style={{display:'inline-block',background:m.isAgent?'#0a1628':'white',color:m.isAgent?'white':'#333',padding:'10px 15px',borderRadius:'12px',maxWidth:'70%'}}>
+            <p style={{margin:0,fontSize:'14px'}}>{m.text}</p><small style={{opacity:0.7,fontSize:'10px'}}>{m.time}</small>
+          </div>
+        </div>
+      ))}
+    </div>
+    <div style={{display:'flex',gap:'10px'}}>
+      <input type="text" value={agentChatInput} onChange={e=>setAgentChatInput(e.target.value)} onKeyPress={e=>e.key==='Enter'&&handleAgentSendChat()} placeholder="Type message..." style={{flex:1,padding:'12px',border:'2px solid #e0e0e0',borderRadius:'8px'}}/>
+      <button onClick={handleAgentSendChat} className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'12px 20px',borderRadius:'8px',cursor:'pointer',fontWeight:'bold'}}>Send</button>
+    </div>
+  </div>
+)}
+
+{/* Agent Calls Tab */}
+{activeTab==='agent-calls'&&(
+  <div className="dash-card">
+    <h3><i className="fas fa-phone"></i> Make a Call</h3>
+    <div style={{display:'flex',gap:'10px',marginBottom:'20px'}}>
+      <select value={agentCallTarget} onChange={e=>setAgentCallTarget(e.target.value)} style={{padding:'10px',borderRadius:'5px',border:'2px solid #e0e0e0',flex:1}}>
+        <option value="">Select who to call...</option>
+        <option value="Admin">Admin</option>
+        <option value="Support">Support</option>
+        <option value="Job Seeker">Job Seeker</option>
+      </select>
+      <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}} onClick={handleStartCall}>📹 Video Call</button>
+      <button className="btn-sm" style={{background:'#0a1628',color:'#d4a843',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}} onClick={handleStartCall}>📞 Voice Call</button>
+    </div>
+    {showAgentCall && (
+      <div style={{marginTop:'15px'}}>
+        <button className="btn btn-red" style={{marginBottom:'10px'}} onClick={()=>setShowAgentCall(false)}>❌ End Call</button>
+        <iframe src={`https://meet.jit.si/JobConnect-Agent-${Date.now()}`} style={{width:'100%',height:'400px',border:'none',borderRadius:'10px'}} allow="camera; microphone; fullscreen"/>
+      </div>
+    )}
+  </div>
+)}
+
+{/* Agent Notice Board Tab */}
+{activeTab==='agent-noticeboard'&&(
+  <div className="dash-card">
+    <h3><i className="fas fa-clipboard-list"></i> Notice Board & Broadcasts</h3>
+    {agentNoticeBoard.map(n=>(
+      <div key={n.id} style={{borderLeft:'4px solid '+(n.priority==='urgent'?'#dc3545':n.priority==='high'?'#ffc107':'#d4a843'),padding:'15px',marginBottom:'12px',background:n.priority==='urgent'?'#fff5f5':'white',borderRadius:'8px'}}>
+        <div style={{display:'flex',justifyContent:'space-between'}}>
+          <h4>{n.title}</h4>
+          <span className={`badge ${n.priority==='urgent'?'badge-pending':n.priority==='high'?'badge-gold':'badge-verified'}`}>{n.priority}</span>
+        </div>
+        <p className="text-muted">{n.content}</p>
+        <small>{n.date}</small>
+      </div>
+    ))}
+  </div>
+)}
         {/* Password Tab */}
         {activeTab === 'password' && (<div className="dash-card form-card"><h3>🔒 Change Password</h3>{passwordMsg && <div className={passwordMsg.includes('✅')?'success-message':'error-message'}>{passwordMsg}</div>}<div className="form-group"><label>Current</label><input type="password" value={passwordForm.current} onChange={e=>setPasswordForm({...passwordForm,current:e.target.value})}/></div><div className="form-group"><label>New</label><input type="password" value={passwordForm.newPass} onChange={e=>setPasswordForm({...passwordForm,newPass:e.target.value})}/></div><div className="form-group"><label>Confirm</label><input type="password" value={passwordForm.confirm} onChange={e=>setPasswordForm({...passwordForm,confirm:e.target.value})}/></div><button className="btn-gold" onClick={handlePasswordChange}>Update</button></div>)}
 

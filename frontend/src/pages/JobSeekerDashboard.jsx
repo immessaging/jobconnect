@@ -32,7 +32,7 @@ function JobSeekerDashboard() {
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
   const [releasedCommission, setReleasedCommission] = useState({});
 
-  const [seekerMessages, setSeekerMessages] = useState([
+  const [seekersMessages, setSeekersMessages] = useState([
     { id: 1, from: 'John Agent', subject: 'Interview Preparation', message: 'Prepare for your interview on Friday.', time: '2 hours ago', unread: true },
     { id: 2, from: 'JobConnect Admin', subject: 'Verification Reminder', message: 'Complete your verification to access all features.', time: 'Yesterday', unread: true },
   ]);
@@ -40,7 +40,38 @@ function JobSeekerDashboard() {
   const [notifications, setNotifications] = useState([
     { id: 1, title: 'New Job Match', message: 'A new Software Developer job matches your profile', type: 'info', time: '1 hour ago' },
   ]);
+  const [seekerMessages, setSeekerMessages] = useState([
+    { id: 1, from: 'John Agent', subject: 'Interview Preparation', message: 'Prepare for your interview on Friday. I will send study materials.', time: '2 hours ago', unread: true },
+    { id: 2, from: 'JobConnect Admin', subject: 'Verification Reminder', message: 'Please complete your verification to access all features.', time: 'Yesterday', unread: true },
+    { id: 3, from: 'John Agent', subject: 'Job Application Received', message: 'Your application for Software Developer has been received.', time: '3 days ago', unread: false },
+  ]);
+  const [seekerChatMessages, setSeekerChatMessages] = useState([]);
+  const [seekerChatInput, setSeekerChatInput] = useState('');
+  const [selectedSeekerContact, setSelectedSeekerContact] = useState('');
+  const [seekerCallTarget, setSeekerCallTarget] = useState('');
+  const [showSeekerCall, setShowSeekerCall] = useState(false);
+  const [seekerNoticeBoard, setSeekerNoticeBoard] = useState([
+    { id: 1, title: 'New Feature: Video Meetings', content: 'You can now make video calls directly from your dashboard.', priority: 'normal', date: '2024-06-01' },
+    { id: 2, title: 'Job Alert', content: 'New jobs posted in your area. Check the Find Jobs tab!', priority: 'high', date: '2024-05-30' },
+  ]);
+    const handleSeekerSendChat = () => {
+    if (!seekerChatInput.trim()) return;
+    setSeekerChatMessages([...seekerChatMessages, { id: Date.now(), sender: 'seeker', text: seekerChatInput, time: new Date().toLocaleTimeString(), isSeeker: true }]);
+    setSeekerChatInput('');
+  };
 
+  const handleSeekerReplyMessage = (from) => {
+    const reply = prompt(`Reply to ${from}:`);
+    if (reply) alert(`✅ Reply sent to ${from}`);
+  };
+
+  const handleSeekerStartCall = () => {
+    if (!seekerCallTarget) { alert('Select who to call'); return; }
+    setShowSeekerCall(true);
+    const roomUrl = `https://meet.jit.si/JobConnect-Seeker-${Date.now()}`;
+    navigator.clipboard?.writeText(roomUrl);
+    alert(`📋 Room link copied! Share with ${seekerCallTarget} to join the call.\n\n${roomUrl}`);
+  };
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (!userData) { navigate('/signin'); return; }
@@ -140,6 +171,11 @@ function JobSeekerDashboard() {
           <button className={`nav-item ${activeTab==='verification'?'active':''}`} onClick={()=>setActiveTab('verification')}><i className="fas fa-id-card"></i> <span className="sidebar-text">Verification</span></button>
           <button className={`nav-item ${activeTab==='password'?'active':''}`} onClick={()=>setActiveTab('password')}><i className="fas fa-lock"></i> <span className="sidebar-text">Change Password</span></button>
           <hr className="sidebar-divider" />
+          <hr className="sidebar-divider" /><div className="nav-header">COMMUNICATION</div>
+<button className={`nav-item ${activeTab==='seeker-messages'?'active':''}`} onClick={()=>setActiveTab('seeker-messages')}><i className="fas fa-envelope"></i> <span className="sidebar-text">Messages</span>{seekerMessages.filter(m=>m.unread).length>0&&<span className="notification-badge">{seekerMessages.filter(m=>m.unread).length}</span>}</button>
+<button className={`nav-item ${activeTab==='seeker-chat'?'active':''}`} onClick={()=>setActiveTab('seeker-chat')}><i className="fas fa-comments"></i> <span className="sidebar-text">Live Chat</span></button>
+<button className={`nav-item ${activeTab==='seeker-calls'?'active':''}`} onClick={()=>setActiveTab('seeker-calls')}><i className="fas fa-phone"></i> <span className="sidebar-text">Make Calls</span></button>
+<button className={`nav-item ${activeTab==='seeker-noticeboard'?'active':''}`} onClick={()=>setActiveTab('seeker-noticeboard')}><i className="fas fa-clipboard-list"></i> <span className="sidebar-text">Notice Board</span></button>
           <button className="nav-item logout-btn" onClick={handleLogout}><i className="fas fa-sign-out-alt"></i> <span className="sidebar-text">Logout</span></button>
         </nav>
       </div>
@@ -195,7 +231,88 @@ function JobSeekerDashboard() {
             {verifyMsg && <div className={verifyMsg.includes('✅') ? 'success-message' : 'error-message'} style={{marginTop:'15px'}}>{verifyMsg}</div>}
           </div>
         )}
+{/* Seeker Messages Tab */}
+{activeTab==='seeker-messages'&&(
+  <div className="dash-card">
+    <h3><i className="fas fa-envelope"></i> Messages</h3>
+    <div className="table-container"><table className="data-table"><thead><tr><th>From</th><th>Subject</th><th>Message</th><th>Time</th><th>Action</th></tr></thead><tbody>
+      {seekerMessages.map(m=>(
+        <tr key={m.id} style={{background:m.unread?'#f0f7ff':'transparent',fontWeight:m.unread?'bold':'normal'}}>
+          <td>{m.from}</td><td>{m.subject}</td><td>{m.message?.substring(0,40)}...</td><td>{m.time}</td>
+          <td><button className="btn-sm" style={{background:'#0a1628',color:'white',border:'none',padding:'5px 10px',borderRadius:'3px',cursor:'pointer'}} onClick={()=>handleSeekerReplyMessage(m.from)}>Reply</button></td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  </div>
+)}
 
+{/* Seeker Live Chat Tab */}
+{activeTab==='seeker-chat'&&(
+  <div className="dash-card" style={{display:'flex',flexDirection:'column',height:'60vh'}}>
+    <h3><i className="fas fa-comments"></i> Live Chat</h3>
+    <div style={{display:'flex',gap:'10px',marginBottom:'15px'}}>
+      <select value={selectedSeekerContact} onChange={e=>setSelectedSeekerContact(e.target.value)} style={{padding:'8px',borderRadius:'5px',border:'2px solid #e0e0e0',flex:1}}>
+        <option value="">Select contact...</option>
+        <option value="Admin">Admin / Support</option>
+        <option value="Agent">My Agent</option>
+      </select>
+    </div>
+    <div style={{flex:1,overflowY:'auto',border:'1px solid #e0e0e0',borderRadius:'8px',padding:'15px',marginBottom:'15px',background:'#f9f9f9'}}>
+      {seekerChatMessages.length===0?<p className="text-muted" style={{textAlign:'center'}}>Start a conversation</p>:
+        seekerChatMessages.map(m=>(
+          <div key={m.id} style={{textAlign:m.isSeeker?'right':'left',marginBottom:'12px'}}>
+            <div style={{display:'inline-block',background:m.isSeeker?'#0a1628':'white',color:m.isSeeker?'white':'#333',padding:'10px 15px',borderRadius:'12px',maxWidth:'70%'}}>
+              <p style={{margin:0,fontSize:'14px'}}>{m.text}</p><small style={{opacity:0.7,fontSize:'10px'}}>{m.time}</small>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+    <div style={{display:'flex',gap:'10px'}}>
+      <input type="text" value={seekerChatInput} onChange={e=>setSeekerChatInput(e.target.value)} onKeyPress={e=>e.key==='Enter'&&handleSeekerSendChat()} placeholder="Type message..." style={{flex:1,padding:'12px',border:'2px solid #e0e0e0',borderRadius:'8px'}}/>
+      <button onClick={handleSeekerSendChat} className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'12px 20px',borderRadius:'8px',cursor:'pointer',fontWeight:'bold'}}>Send</button>
+    </div>
+  </div>
+)}
+
+{/* Seeker Calls Tab */}
+{activeTab==='seeker-calls'&&(
+  <div className="dash-card">
+    <h3><i className="fas fa-phone"></i> Make a Call</h3>
+    <div style={{display:'flex',gap:'10px',marginBottom:'20px'}}>
+      <select value={seekerCallTarget} onChange={e=>setSeekerCallTarget(e.target.value)} style={{padding:'10px',borderRadius:'5px',border:'2px solid #e0e0e0',flex:1}}>
+        <option value="">Select who to call...</option>
+        <option value="Admin">Admin / Support</option>
+        <option value="Agent">My Agent</option>
+      </select>
+      <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}} onClick={handleSeekerStartCall}>📹 Video Call</button>
+      <button className="btn-sm" style={{background:'#0a1628',color:'#d4a843',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}} onClick={handleSeekerStartCall}>📞 Voice Call</button>
+    </div>
+    {showSeekerCall&&(
+      <div style={{marginTop:'15px'}}>
+        <button className="btn btn-red" style={{marginBottom:'10px'}} onClick={()=>setShowSeekerCall(false)}>❌ End Call</button>
+        <iframe src={`https://meet.jit.si/JobConnect-Seeker-${Date.now()}`} style={{width:'100%',height:'400px',border:'none',borderRadius:'10px'}} allow="camera; microphone; fullscreen"/>
+      </div>
+    )}
+  </div>
+)}
+
+{/* Seeker Notice Board Tab */}
+{activeTab==='seeker-noticeboard'&&(
+  <div className="dash-card">
+    <h3><i className="fas fa-clipboard-list"></i> Notice Board & Broadcasts</h3>
+    {seekerNoticeBoard.map(n=>(
+      <div key={n.id} style={{borderLeft:'4px solid '+(n.priority==='urgent'?'#dc3545':n.priority==='high'?'#ffc107':'#d4a843'),padding:'15px',marginBottom:'12px',background:n.priority==='urgent'?'#fff5f5':'white',borderRadius:'8px'}}>
+        <div style={{display:'flex',justifyContent:'space-between'}}>
+          <h4>{n.title}</h4>
+          <span className={`badge ${n.priority==='urgent'?'badge-pending':n.priority==='high'?'badge-gold':'badge-verified'}`}>{n.priority}</span>
+        </div>
+        <p className="text-muted">{n.content}</p>
+        <small>{n.date}</small>
+      </div>
+    ))}
+  </div>
+)}
         {/* Password Tab */}
         {activeTab === 'password' && (<div className="dash-card form-card"><h3>🔒 Change Password</h3>{passwordMsg && <div className={passwordMsg.includes('✅')?'success-message':'error-message'}>{passwordMsg}</div>}<div className="form-group"><label>Current Password</label><input type="password" value={passwordForm.current} onChange={e=>setPasswordForm({...passwordForm,current:e.target.value})}/></div><div className="form-group"><label>New Password</label><input type="password" value={passwordForm.newPass} onChange={e=>setPasswordForm({...passwordForm,newPass:e.target.value})}/></div><div className="form-group"><label>Confirm Password</label><input type="password" value={passwordForm.confirm} onChange={e=>setPasswordForm({...passwordForm,confirm:e.target.value})}/></div><button className="btn-gold" onClick={handlePasswordChange}>Update Password</button></div>)}
 
