@@ -61,7 +61,7 @@ export const agentConfirmDispute = (agreementId) => api.post(`/api/commission/${
 // ============================================
 export const getAnalyticsSummary = () => api.get('/api/analytics/summary');
 export const getPlatformStats = () => api.get('/api/stats');
-export const sendEmail = (data) => api.post('/api/email/send', data);
+export const send_Email = (data) => api.post('/api/email/send', data);
 export const sendNotification = (data) => api.post('/api/email/notify', data); 
 export const submitVerification = (data) => api.post('/api/verify/submit', data);
 
@@ -73,6 +73,14 @@ export const verifyBVN = (data) => api.post('/api/kyc/verify-bvn', data);
 export const verifyVNIN = (data) => api.post('/api/kyc/verify-vnin', data);
 export const uploadUtilityBill = (data) => api.post('/api/kyc/upload-utility-bill', data);
 export const getKYCStatus = (userId) => api.get(`/api/kyc/status/${userId}`);
+
+// Admin Communication
+export const sendMessage = (data) => api.post('/api/admin/message/send', data);
+export const broadcastMessage = (data) => api.post('/api/admin/broadcast', data);
+export const getUserMessages = (userId) => api.get(`/api/admin/messages/${userId}`);
+export const getUsersList = () => api.get('/api/admin/users-list');
+export const sendEmail = (data) => api.post('/api/admin/send-email', data);
+export const sendSMS = (data) => api.post('/api/admin/send-sms', data);
 // ============================================
 // CLOUDINARY FILE UPLOAD
 // ============================================

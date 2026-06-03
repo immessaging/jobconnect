@@ -236,6 +236,117 @@ const handleVerifyAction = async (userId, action) => {
           <button className={`nav-item ${activeTab==='services'?'active':''}`} onClick={()=>setActiveTab('services')}>🔧 <span className="sidebar-text">Services</span></button>
           <hr className="sidebar-divider" />
           <button className="nav-item logout-btn" onClick={handleLogout}>🚪 <span className="sidebar-text">Logout</span></button>
+           // Add to sidebar nav
+<button className={`nav-item ${activeTab==='communication'?'active':''}`} onClick={()=>setActiveTab('communication')}>
+  <i className="fas fa-comments"></i> <span className="sidebar-text">Communication</span>
+</button>
+
+// Add communication tab content
+{activeTab === 'communication' && (
+  <div>
+    <div className="dash-card">
+      <h3>📨 Send Message</h3>
+      <div className="form-group">
+        <label>To (User)</label>
+        <select id="msg-receiver" className="form-control">
+          <option value="">Select user...</option>
+          {users.map(u => (
+            <option key={u.id} value={u.id}>{u.email} ({u.type})</option>
+          ))}
+        </select>
+      </div>
+      <div className="form-group">
+        <label>Subject</label>
+        <input type="text" id="msg-subject" placeholder="Message subject" />
+      </div>
+      <div className="form-group">
+        <label>Message</label>
+        <textarea id="msg-body" rows="4" placeholder="Type your message..."></textarea>
+      </div>
+      <button className="btn btn-gold" onClick={() => {
+        const receiver = document.getElementById('msg-receiver').value;
+        const subject = document.getElementById('msg-subject').value;
+        const message = document.getElementById('msg-body').value;
+        if (!receiver || !message) { alert('Fill all fields'); return; }
+        sendMessage({ sender_id: user?.id, receiver_id: receiver, subject, message })
+          .then(() => alert('✅ Message sent!'))
+          .catch(() => alert('❌ Failed'));
+      }}>📤 Send Message</button>
+    </div>
+
+    <div className="dash-card" style={{marginTop:'20px'}}>
+      <h3>📢 Broadcast to Group</h3>
+      <div className="form-row">
+        <div className="form-group">
+          <label>Group</label>
+          <select id="broadcast-group">
+            <option value="all">All Users</option>
+            <option value="agents">All Agents</option>
+            <option value="seekers">All Job Seekers</option>
+            <option value="staff">Staff</option>
+            <option value="verified">Verified Users</option>
+            <option value="unverified">Unverified Users</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Via</label>
+          <select id="broadcast-via">
+            <option value="platform">In-App Message</option>
+            <option value="email">Email</option>
+          </select>
+        </div>
+      </div>
+      <div className="form-group">
+        <label>Subject</label>
+        <input type="text" id="broadcast-subject" placeholder="Announcement subject" />
+      </div>
+      <div className="form-group">
+        <label>Message</label>
+        <textarea id="broadcast-body" rows="4" placeholder="Type broadcast message..."></textarea>
+      </div>
+      <button className="btn btn-red" onClick={() => {
+        const group = document.getElementById('broadcast-group').value;
+        const via = document.getElementById('broadcast-via').value;
+        const subject = document.getElementById('broadcast-subject').value;
+        const message = document.getElementById('broadcast-body').value;
+        if (!message) { alert('Enter a message'); return; }
+        broadcastMessage({ sender_id: user?.id, group_type: group, subject, message, sent_via: via })
+          .then(res => alert(`✅ Sent to ${res.data.recipients} users!`))
+          .catch(() => alert('❌ Failed'));
+      }}>📢 Broadcast Now</button>
+    </div>
+
+    <div className="dash-card" style={{marginTop:'20px'}}>
+      <h3>📱 Quick Contact</h3>
+      <div className="grid-2">
+        {users.filter(u => u.phone).slice(0,6).map(u => (
+          <div key={u.id} className="card" style={{padding:'15px'}}>
+            <p><strong>{u.email}</strong></p>
+            <p>📞 {u.phone}</p>
+            <div style={{display:'flex',gap:'10px',marginTop:'8px'}}>
+              <a href={`https://wa.me/234${u.phone?.replace('080','80')}`} target="_blank" rel="noreferrer"
+                className="btn-sm" style={{background:'#25D366',color:'white',padding:'5px 10px',borderRadius:'5px',textDecoration:'none'}}>
+                💬 WhatsApp
+              </a>
+              <a href={`sms:${u.phone}`}
+                className="btn-sm" style={{background:'#0a1628',color:'#d4a843',padding:'5px 10px',borderRadius:'5px',textDecoration:'none'}}>
+                📱 SMS
+              </a>
+              <button className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'5px 10px',borderRadius:'5px',cursor:'pointer'}}
+                onClick={() => {
+                  const subj = prompt('Subject:');
+                  const msg = prompt('Message:');
+                  if(msg) sendEmail({user_id: u.id, recipient: u.email, subject: subj, message: msg}).then(()=>alert('✅ Email sent!'));
+                }}>
+                📧 Email
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
         </nav>
       </div>
 

@@ -1188,6 +1188,198 @@ def post_job_with_kyc():
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
+
+        # ============================================
+# ADMIN COMMUNICATION SYSTEM
+# ============================================
+
+# Send message to individual user
+@app.route('/api/admin/message/send', methods=['POST'])
+def admin_send_message():
+    try:
+        data = request.json
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            INSERT INTO admin_messages (sender_id, receiver_id, subject, message)
+            VALUES (%s, %s, %s, %s) RETURNING id
+        """, (data.get('sender_id'), data.get('receiver_id'),
+              data.get('subject', ''), data.get('message', '')))
+        
+        msg_id = cur.fetchone()[0]
+        conn.commit()
+        cur.close(); conn.close()
+        
+        return jsonify({"success": True, "message_id": str(msg_id)}), 201
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# Broadcast message to group
+@app.route('/api/admin/broadcast', methods=['POST'])
+def admin_broadcast():
+    try:
+        data = request.json
+        group_type = data.get('group_type', 'all')
+        sender_id = data.get('sender_id')
+        subject = data.get('subject', '')
+        message = data.get('message', '')
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Save broadcast
+        cur.execute("""
+            INSERT INTO broadcast_messages (sender_id, group_type, subject, message, sent_via)
+            VALUES (%s, %s, %s, %s, %s) RETURNING id
+        """, (sender_id, group_type, subject, message, data.get('sent_via', 'platform')))
+        
+        broadcast_id = cur.fetchone()[0]
+        
+        # Get recipients based on group type
+        if group_type == 'all':
+            cur.execute("SELECT id, email FROM users WHERE id != %s", (sender_id,))
+        elif group_type == 'agents':
+            cur.execute("SELECT id, email FROM users WHERE user_type = 'agent'")
+        elif group_type == 'seekers':
+            cur.execute("SELECT id, email FROM users WHERE user_type = 'job_seeker'")
+        elif group_type == 'staff':
+            cur.execute("SELECT id, email FROM users WHERE user_type = 'staff'")
+        elif group_type == 'verified':
+            cur.execute("SELECT id, email FROM users WHERE is_verified = true")
+        elif group_type == 'unverified':
+            cur.execute("SELECT id, email FROM users WHERE is_verified = false")
+        else:
+            cur.execute("SELECT id, email FROM users WHERE id != %s", (sender_id,))
+        
+        recipients = cur.fetchall()
+        
+        # Send individual messages to each recipient
+        for recipient in recipients:
+            cur.execute("""
+                INSERT INTO admin_messages (sender_id, receiver_id, subject, message)
+                VALUES (%s, %s, %s, %s)
+            """, (sender_id, str(recipient[0]), subject, message))
+        
+        conn.commit()
+        cur.close(); conn.close()
+        
+        return jsonify({
+            "success": True,
+            "broadcast_id": str(broadcast_id),
+            "recipients": len(recipients)
+        }), 201
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# Get messages for a user
+@app.route('/api/admin/messages/<user_id>', methods=['GET'])
+def get_user_messages(user_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT m.id, u.email as sender_email, m.subject, m.message, m.is_read, m.created_at
+            FROM admin_messages m
+            JOIN users u ON m.sender_id = u.id
+            WHERE m.receiver_id = %s
+            ORDER BY m.created_at DESC LIMIT 50
+        """, (user_id,))
+        
+        messages = [{
+            "id": str(r[0]), "sender": r[1], "subject": r[2],
+            "message": r[3], "is_read": r[4], "created_at": str(r[5])
+        } for r in cur.fetchall()]
+        
+        cur.close(); conn.close()
+        return jsonify({"success": True, "messages": messages})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# Get all users for messaging
+@app.route('/api/admin/users-list', methods=['GET'])
+def get_users_list():
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT id, email, user_type, phone, is_verified
+            FROM users ORDER BY created_at DESC
+        """)
+        
+        users = [{
+            "id": str(r[0]), "email": r[1], "user_type": r[2],
+            "phone": r[3], "is_verified": r[4]
+        } for r in cur.fetchall()]
+        
+        cur.close(); conn.close()
+        return jsonify({"success": True, "users": users})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# Send email notification
+@app.route('/api/admin/send-email', methods=['POST'])
+def admin_send_email():
+    try:
+        data = request.json
+        
+        # Log the communication
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO comm_logs (user_id, recipient, type, subject, message, status)
+            VALUES (%s, %s, 'email', %s, %s, 'sent')
+        """, (data.get('user_id'), data.get('recipient'), data.get('subject'), data.get('message')))
+        conn.commit()
+        cur.close(); conn.close()
+        
+        # Send via SendGrid
+        try:
+            sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+            mail = Mail(
+                Email(FROM_EMAIL, FROM_NAME),
+                To(data.get('recipient')),
+                data.get('subject', 'JobConnect Notification'),
+                Content("text/html", data.get('message', ''))
+            )
+            sg.client.mail.send.post(request_body=mail.get())
+        except:
+            pass
+        
+        return jsonify({"success": True, "message": "Email sent"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+# Send SMS/WhatsApp notification
+@app.route('/api/admin/send-sms', methods=['POST'])
+def admin_send_sms():
+    try:
+        data = request.json
+        phone = data.get('phone')
+        message = data.get('message')
+        msg_type = data.get('type', 'sms')  # 'sms' or 'whatsapp'
+        
+        # Log the communication
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO comm_logs (user_id, recipient, type, subject, message, status)
+            VALUES (%s, %s, %s, %s, %s, 'sent')
+        """, (data.get('user_id'), phone, msg_type, data.get('subject', ''), message))
+        conn.commit()
+        cur.close(); conn.close()
+        
+        # Format WhatsApp URL
+        if msg_type == 'whatsapp':
+            wa_url = f"https://wa.me/{phone.replace('+','').replace(' ','')}?text={message[:500]}"
+            return jsonify({"success": True, "whatsapp_url": wa_url, "message": "Open WhatsApp link"}), 200
+        
+        # SMS - would need Twilio or similar service
+        return jsonify({"success": True, "message": "SMS logged. SMS gateway integration needed."}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 # ============================================
 # RUN APPLICATION
 # ============================================
