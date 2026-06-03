@@ -177,10 +177,59 @@ function AdminDashboard() {
 
         {/* LIVE CHAT TAB - REAL USERS */}
         {activeTab==='chat'&&(<div className="dash-card" style={{display:'flex',flexDirection:'column',height:'70vh'}}><h3><i className="fas fa-comments"></i> Live Chat {selectedChatUser?`- ${selectedChatUser}`:''}</h3><div style={{display:'flex',gap:'15px',marginBottom:'15px'}}><select value={selectedChatUser} onChange={e=>{setSelectedChatUser(e.target.value);setChatMessages([]);}} style={{padding:'8px',borderRadius:'5px',border:'2px solid #e0e0e0'}}><option value="">Select user to chat...</option>{allUsers.map(u=>(<option key={u.id} value={u.email}>{u.email} ({u.user_type})</option>))}</select></div><div style={{flex:1,overflowY:'auto',border:'1px solid #e0e0e0',borderRadius:'8px',padding:'15px',marginBottom:'15px',background:'#f9f9f9'}}>{chatMessages.map(m=>(<div key={m.id} style={{textAlign:m.isAdmin?'right':'left',marginBottom:'12px'}}><div style={{display:'inline-block',background:m.isAdmin?'#0a1628':'white',color:m.isAdmin?'white':'#333',padding:'10px 15px',borderRadius:'12px',maxWidth:'70%'}}><p style={{margin:0,fontSize:'14px'}}>{m.text}</p><small style={{opacity:0.7,fontSize:'10px'}}>{m.time}</small></div></div>))}{chatMessages.length===0&&<p className="text-muted" style={{textAlign:'center'}}>Select a user and start chatting</p>}</div><div style={{display:'flex',gap:'10px'}}><input type="text" value={newChatMessage} onChange={e=>setNewChatMessage(e.target.value)} onKeyPress={e=>e.key==='Enter'&&handleSendChat()} placeholder="Type message..." style={{flex:1,padding:'12px',border:'2px solid #e0e0e0',borderRadius:'8px'}} disabled={!selectedChatUser}/><button onClick={handleSendChat} className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'12px 20px',borderRadius:'8px',cursor:'pointer',fontWeight:'bold'}} disabled={!selectedChatUser}>Send</button></div></div>)}
+{/* VIDEO CALLS TAB - REAL CALLS */}
+{activeTab === 'calls' && (
+  <div className="dash-card">
+    <h3><i className="fas fa-video"></i> Video & Voice Calls</h3>
+    <div style={{display:'flex',gap:'10px',marginBottom:'20px'}}>
+      <select value={callTarget} onChange={e=>setCallTarget(e.target.value)} style={{padding:'10px',borderRadius:'5px',border:'2px solid #e0e0e0',flex:1}}>
+        <option value="">Select user to call...</option>
+        {allUsers.map(u => (
+          <option key={u.id} value={u.email}>{u.email} ({u.user_type})</option>
+        ))}
+      </select>
+      <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}}
+        onClick={() => {
+          if (!callTarget) { alert('Select a user first'); return; }
+          // Create a Daily.co room and open it
+          const roomName = 'jobconnect-' + Date.now();
+          window.open(`https://jobconnect.daily.co/${roomName}`, '_blank', 'width=800,height=600');
+        }}>
+        📹 Video Call
+      </button>
+    </div>
+  </div>
+)}
 
         {/* VIDEO CALLS TAB - REAL USERS */}
         {activeTab==='calls'&&(<div className="dash-card"><h3><i className="fas fa-video"></i> Video & Voice Calls</h3><div style={{display:'flex',gap:'10px',marginBottom:'20px'}}><select value={callTarget} onChange={e=>setCallTarget(e.target.value)} style={{padding:'10px',borderRadius:'5px',border:'2px solid #e0e0e0',flex:1}}><option value="">Select user to call...</option>{allUsers.map(u=>(<option key={u.id} value={u.email}>{u.email} ({u.user_type})</option>))}</select><button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}} onClick={()=>callTarget?alert(`📹 Starting video call with ${callTarget}`):alert('Select a user first')}>📹 Video Call</button><button className="btn-sm" style={{background:'#0a1628',color:'#d4a843',border:'none',padding:'10px 20px',borderRadius:'5px',cursor:'pointer'}} onClick={()=>callTarget?alert(`📞 Starting voice call with ${callTarget}`):alert('Select a user first')}>📞 Voice Call</button></div><h4>Call History</h4><div className="table-container"><table className="data-table"><thead><tr><th>With</th><th>Type</th><th>Duration</th><th>Date</th><th>Status</th></tr></thead><tbody>{callLogs.length===0?<tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:'20px'}}>No calls yet</td></tr>:callLogs.map(c=>(<tr key={c.id}><td>{c.with}</td><td>{c.type==='video'?'📹':'📞'} {c.type}</td><td>{c.duration}</td><td>{c.date}</td><td><span className="badge badge-verified">{c.status}</span></td></tr>))}</tbody></table></div></div>)}
-
+{activeTab === 'calls' && callTarget && (
+  <div style={{marginTop:'15px'}}>
+    <h4>📹 Call with {callTarget}</h4>
+    <div style={{background:'#000',borderRadius:'10px',padding:'20px',textAlign:'center',color:'white',minHeight:'400px'}}>
+      <p style={{marginTop:'150px'}}>📹 Video call will appear here</p>
+      <p className="text-muted">Send the room link to the user to join</p>
+      <button className="btn btn-red" onClick={() => {
+        const roomUrl = `https://jobconnect.daily.co/${'room-' + Date.now()}`;
+        navigator.clipboard.writeText(roomUrl);
+        alert('📋 Room link copied! Share with user to join the call.');
+        window.open(roomUrl, '_blank');
+      }}>
+        🔗 Create Call Room & Copy Link
+      </button>
+    </div>
+  </div>
+)}
+{activeTab === 'calls' && callTarget && (
+  <div style={{marginTop:'15px'}}>
+    <h4>📹 Call with {callTarget}</h4>
+    <iframe
+      src={`https://meet.jit.si/jobconnect-${Date.now()}`}
+      style={{width:'100%',height:'500px',border:'none',borderRadius:'10px'}}
+      allow="camera; microphone; fullscreen; display-capture; autoplay"
+    />
+  </div>
+)}
         {/* VERIFICATIONS TAB */}
         {activeTab==='verifications'&&(<div className="dash-card"><h3>📋 Pending Verifications</h3><div className="grid-2">{pendingUsers.map(u=>(<div key={u.id} className="card" style={{borderLeft:'4px solid #ffc107',padding:'15px'}}><h4>{u.full_name||u.email}</h4><span className="badge badge-pending">{u.user_type}</span>{u.passport_photo&&<div style={{marginTop:'10px'}}><img src={u.passport_photo} alt="Passport" style={{width:'100%',maxWidth:'200px',borderRadius:'8px'}}/></div>}<p>NIN: {u.nin} | BVN: {u.bvn}</p><p>Bank: {u.bank_name} | Account: {u.account_number}</p><p>Address: {u.address}</p><div style={{display:'flex',gap:'10px',marginTop:'10px'}}><button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}} onClick={()=>handleVerifyAction(u.id,'approve')}>✅ Approve</button><button className="btn-sm" style={{background:'#dc3545',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}} onClick={()=>handleVerifyAction(u.id,'reject')}>❌ Reject</button></div></div>))}</div></div>)}
 
