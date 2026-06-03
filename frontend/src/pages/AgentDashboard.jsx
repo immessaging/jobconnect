@@ -225,7 +225,21 @@ const handleStartCall = () => {
         {!agentProfileId && user?.user_type === 'agent' && (<div className="verification-warning"><h3>⚠️ AGENT PROFILE NOT FOUND</h3><p>Please complete verification to create your agent profile.</p></div>)}
         <div className="welcome-card"><div><h4>Welcome, {user?.email?.split('@')[0] || 'Agent'}!</h4></div></div>
         {msg && <div className={msg.includes('✅')?'success-message':'error-message'}>{msg}</div>}
-
+{/* View Profile Tab */}
+{activeTab === 'profile' && (
+  <div className="dash-card form-card">
+    <h3>👤 My Profile</h3>
+    <div className="form-group"><label>Full Name</label><input type="text" defaultValue={user?.full_name || ''} readOnly /></div>
+    <div className="form-group"><label>Email Address</label><input type="email" value={user?.email || ''} readOnly /></div>
+    <div className="form-group"><label>Phone Number</label><input type="tel" defaultValue={user?.phone || ''} readOnly /></div>
+    <div className="form-group"><label>User Type</label><input type="text" value="Agent" readOnly /></div>
+    <div className="form-group"><label>Verification Status</label><input type="text" value={isVerified ? 'Verified' : 'Pending'} readOnly style={{color: isVerified ? '#28a745' : '#dc3545', fontWeight: 'bold'}} /></div>
+    <div className="form-group"><label>NIN</label><input type="text" defaultValue={user?.nin || 'Not set'} readOnly /></div>
+    <div className="form-group"><label>BVN</label><input type="text" defaultValue={user?.bvn || 'Not set'} readOnly /></div>
+    <div className="form-group"><label>Bank Name</label><input type="text" defaultValue={user?.bank_name || 'Not set'} readOnly /></div>
+    <div className="form-group"><label>Account Number</label><input type="text" defaultValue={user?.account_number || 'Not set'} readOnly /></div>
+  </div>
+)}
         {/* VERIFICATION TAB */}
         {activeTab === 'verification' && (
           <div className="dash-card form-card">
@@ -375,8 +389,8 @@ const handleStartCall = () => {
         {/* Post Job Tab */}
         {activeTab==='post'&&(<div className="dash-card form-card"><h3>Post New Job</h3><form onSubmit={handlePost}><div className="form-group"><label>Job Title *</label><input value={form.job_title} onChange={e=>setForm({...form,job_title:e.target.value})} required/></div><div className="form-group"><label>Organization *</label><input value={form.organization_name} onChange={e=>setForm({...form,organization_name:e.target.value})} required/></div><div className="form-group"><label>Qualification *</label><textarea value={form.qualification_requirements} onChange={e=>setForm({...form,qualification_requirements:e.target.value})} required/></div><div className="form-group"><label>Experience *</label><textarea value={form.experience_requirements} onChange={e=>setForm({...form,experience_requirements:e.target.value})} required/></div><div className="form-row"><div className="form-group"><label>Min Salary (₦)</label><input type="number" value={form.salary_range_min} onChange={e=>setForm({...form,salary_range_min:e.target.value})}/></div><div className="form-group"><label>Max Salary (₦)</label><input type="number" value={form.salary_range_max} onChange={e=>setForm({...form,salary_range_max:e.target.value})}/></div></div><div className="commission-setting-card"><h4>💰 Commission</h4><div className="form-group"><label>% (5-35)</label><input type="number" min="5" max="35" value={commissionPercent} onChange={e=>setCommissionPercent(Number(e.target.value))}/></div><div><label>🔄 Negotiable</label><input type="radio" checked={isNegotiable} onChange={()=>setIsNegotiable(true)}/> <label>🔒 Fixed</label><input type="radio" checked={!isNegotiable} onChange={()=>setIsNegotiable(false)}/></div></div><button type="submit" className="btn-gold">📢 Post Job ({commissionPercent}%)</button></form></div>)}
 
-        {/* Other tabs */}
-        {['applications','disputes','earnings','payout','profile','messages','notifications','prep'].includes(activeTab)&&activeTab!=='verification'&&activeTab!=='password'&&activeTab!=='post'&&activeTab!=='dashboard'&&activeTab!=='jobs'&&(<div className="dash-card"><h3>{activeTab}</h3><p className="text-muted">Content available</p></div>)}
+         {/* Other tabs */}
+        {['messages','notifications','applied','release','dispute','agreements','payments'].includes(activeTab) && activeTab!=='verification' && activeTab!=='password' && activeTab!=='dashboard' && activeTab!=='jobs' && (<div className="dash-card"><h3>{activeTab.charAt(0).toUpperCase()+activeTab.slice(1)}</h3><p className="text-muted">Content available</p></div>)}
       </div>
     </div>
   );

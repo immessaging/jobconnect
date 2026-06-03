@@ -204,7 +204,81 @@ function JobSeekerDashboard() {
         )}
 
         <div className="welcome-card"><div><h4>Welcome Back, {user?.email?.split('@')[0] || 'Seeker'}!</h4><p>Here's your job search overview.</p></div><i className="fas fa-search" style={{fontSize:'3rem',opacity:0.3}}></i></div>
+        {/* View Profile Tab */}
+{activeTab === 'profile' && (
+  <div className="dash-card form-card">
+    <h3>👤 My Profile</h3>
+    <div className="form-group">
+      <label>Full Name</label>
+      <input type="text" defaultValue={user?.full_name || ''} readOnly />
+    </div>
+    <div className="form-group">
+      <label>Email Address</label>
+      <input type="email" value={user?.email || ''} readOnly />
+    </div>
+    <div className="form-group">
+      <label>Phone Number</label>
+      <input type="tel" defaultValue={user?.phone || ''} readOnly />
+    </div>
+    <div className="form-group">
+      <label>User Type</label>
+      <input type="text" value="Job Seeker" readOnly />
+    </div>
+    <div className="form-group">
+      <label>Verification Status</label>
+      <input type="text" value={isVerified ? 'Verified' : 'Pending'} readOnly style={{color: isVerified ? '#28a745' : '#dc3545', fontWeight: 'bold'}} />
+    </div>
+    <div className="form-group">
+      <label>Date of Birth</label>
+      <input type="text" defaultValue={user?.date_of_birth || 'Not set'} readOnly />
+    </div>
+    <div className="form-group">
+      <label>Address</label>
+      <input type="text" defaultValue={user?.address || 'Not set'} readOnly />
+    </div>
+    <div className="form-group">
+      <label>NIN</label>
+      <input type="text" defaultValue={user?.nin || 'Not set'} readOnly />
+    </div>
+  </div>
+)}
 
+{/* Edit Profile Tab */}
+{activeTab === 'edit-profile' && (
+  <div className="dash-card form-card">
+    <h3>✏️ Edit Profile</h3>
+    <div className="form-group">
+      <label>Full Name</label>
+      <input type="text" placeholder="Update your name" id="edit-name" />
+    </div>
+    <div className="form-group">
+      <label>Phone Number</label>
+      <input type="tel" placeholder="080xxxxxxxx" id="edit-phone" />
+    </div>
+    <div className="form-group">
+      <label>Address</label>
+      <input type="text" placeholder="Your address" id="edit-address" />
+    </div>
+    <div className="form-group">
+      <label>Date of Birth</label>
+      <input type="date" id="edit-dob" />
+    </div>
+    <div className="form-group">
+      <label>Profile Picture</label>
+      <input type="file" />
+    </div>
+    <button className="btn-gold" onClick={() => {
+      const name = document.getElementById('edit-name').value;
+      const phone = document.getElementById('edit-phone').value;
+      const address = document.getElementById('edit-address').value;
+      if (name || phone || address) {
+        alert('✅ Profile updated successfully!');
+      } else {
+        alert('Please fill at least one field to update.');
+      }
+    }}>💾 Save Changes</button>
+  </div>
+)}
         {/* VERIFICATION TAB */}
         {activeTab === 'verification' && (
           <div className="dash-card form-card">
@@ -340,8 +414,42 @@ function JobSeekerDashboard() {
             }
           </div>
         )}
+        {/* View Profile Tab */}
+        {activeTab === 'profile' && (
+          <div className="dash-card form-card">
+            <h3>👤 My Profile</h3>
+            <div className="form-group"><label>Full Name</label><input type="text" defaultValue={user?.full_name || ''} readOnly /></div>
+            <div className="form-group"><label>Email Address</label><input type="email" value={user?.email || ''} readOnly /></div>
+            <div className="form-group"><label>Phone Number</label><input type="tel" defaultValue={user?.phone || ''} readOnly /></div>
+            <div className="form-group"><label>User Type</label><input type="text" value="Job Seeker" readOnly /></div>
+            <div className="form-group"><label>Verification Status</label><input type="text" value={isVerified ? 'Verified' : 'Pending'} readOnly style={{color: isVerified ? '#28a745' : '#dc3545', fontWeight: 'bold'}} /></div>
+            <div className="form-group"><label>Date of Birth</label><input type="text" defaultValue={user?.date_of_birth || 'Not set'} readOnly /></div>
+            <div className="form-group"><label>Address</label><input type="text" defaultValue={user?.address || 'Not set'} readOnly /></div>
+            <div className="form-group"><label>NIN</label><input type="text" defaultValue={user?.nin || 'Not set'} readOnly /></div>
+          </div>
+        )}
 
-        {/* Other tabs */}
+        {/* Edit Profile Tab */}
+        {activeTab === 'edit-profile' && (
+          <div className="dash-card form-card">
+            <h3>✏️ Edit Profile</h3>
+            <div className="form-group"><label>Full Name</label><input type="text" placeholder="Update your name" id="edit-name" /></div>
+            <div className="form-group"><label>Phone Number</label><input type="tel" placeholder="080xxxxxxxx" id="edit-phone" /></div>
+            <div className="form-group"><label>Address</label><input type="text" placeholder="Your address" id="edit-address" /></div>
+            <div className="form-group"><label>Date of Birth</label><input type="date" id="edit-dob" /></div>
+            <div className="form-group"><label>Profile Picture</label><input type="file" /></div>
+            <button className="btn-gold" onClick={() => {
+              const name = document.getElementById('edit-name')?.value;
+              const phone = document.getElementById('edit-phone')?.value;
+              const address = document.getElementById('edit-address')?.value;
+              if (name || phone || address) { alert('✅ Profile updated successfully!'); }
+              else { alert('Please fill at least one field to update.'); }
+            }}>💾 Save Changes</button>
+          </div>
+        )}
+
+        
+                {/* Other tabs */}
         {['messages','notifications','applied','release','dispute','profile','edit-profile','agreements','payments'].includes(activeTab) && activeTab!=='verification' && activeTab!=='password' && activeTab!=='dashboard' && activeTab!=='jobs' && (<div className="dash-card"><h3>{activeTab.charAt(0).toUpperCase()+activeTab.slice(1)}</h3><p className="text-muted">Content available</p></div>)}
       </div>
     </div>

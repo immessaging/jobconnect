@@ -141,7 +141,22 @@ function StaffDashboard() {
       <div className={`dashboard-main ${sidebarCollapsed ? 'expanded' : ''}`}>
         <div className="dash-topbar"><div><button className="toggle-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>☰</button></div><div className="header-actions"><span>Welcome, <strong>{user?.email?.split('@')[0] || 'Staff'}</strong></span><span className="badge badge-verified">Support</span><div className="user-avatar" onClick={()=>setShowDropdown(!showDropdown)} style={{cursor:'pointer'}}>{(user?.email?.[0]||'S').toUpperCase()}</div>{showDropdown&&(<div className="profile-dropdown show"><div className="dropdown-header"><strong>{user?.email}</strong></div><button className="dropdown-item" onClick={()=>{setActiveTab('profile');setShowDropdown(false);}}>Profile</button><button className="dropdown-item" onClick={()=>{setActiveTab('password');setShowDropdown(false);}}>Password</button><button className="dropdown-item text-danger" onClick={handleLogout}>Logout</button></div>)}<button className="logout-btn-header" onClick={handleLogout}>🚪 Logout</button></div></div>
         <div className="welcome-card"><div><h4>Welcome, {user?.email?.split('@')[0] || 'Staff'}!</h4><p>Customer Support & Verification Dashboard</p></div></div>
-
+ {/* View Profile Tab */}
+{activeTab === 'profile' && (
+  <div className="dash-card form-card">
+    <h3>👤 My Profile</h3>
+    <div className="form-group"><label>Full Name</label><input type="text" defaultValue={user?.full_name || ''} readOnly /></div>
+    <div className="form-group"><label>Email Address</label><input type="email" value={user?.email || ''} readOnly /></div>
+    <div className="form-group"><label>Phone Number</label><input type="tel" defaultValue={user?.phone || ''} readOnly /></div>
+    <div className="form-group"><label>User Type</label><input type="text" value="Staff" readOnly /></div>
+    <div className="form-group"><label>Staff ID</label><input type="text" defaultValue={user?.id?.substring(0,8) || 'N/A'} readOnly /></div>
+    <div className="form-group"><label>Verification Status</label><input type="text" value="Verified" readOnly style={{color: '#28a745', fontWeight: 'bold'}} /></div>
+    <div className="form-group"><label>NIN</label><input type="text" defaultValue={user?.nin || 'Not set'} readOnly /></div>
+    <div className="form-group"><label>BVN</label><input type="text" defaultValue={user?.bvn || 'Not set'} readOnly /></div>
+    <div className="form-group"><label>Bank Name</label><input type="text" defaultValue={user?.bank_name || 'Not set'} readOnly /></div>
+    <div className="form-group"><label>Account Number</label><input type="text" defaultValue={user?.account_number || 'Not set'} readOnly /></div>
+  </div>
+)}
         {/* VERIFICATION TAB - FULL STAFF FIELDS */}
         {activeTab === 'verification' && (
           <div className="dash-card form-card">
@@ -266,8 +281,8 @@ function StaffDashboard() {
         {/* Dashboard Tab */}
         {activeTab==='dashboard'&&(<div><div className="stats-row"><div className="stat-box"><span className="stat-icon">🎫</span><h3>{stats.openTickets}</h3><p>Open Tickets</p></div><div className="stat-box"><span className="stat-icon">⚖️</span><h3>{stats.pendingDisputes}</h3><p>Disputes</p></div><div className="stat-box"><span className="stat-icon">📧</span><h3>{stats.unreadInquiries}</h3><p>Inquiries</p></div><div className="stat-box"><span className="stat-icon">📞</span><h3>{stats.missedCalls}</h3><p>Calls</p></div></div></div>)}
 
-        {/* Other tabs */}
-        {['tickets','calls','disputes','inquiries','verifications','verification-queue','reports','analytics','messages','notifications','profile'].includes(activeTab)&&activeTab!=='verification'&&activeTab!=='password'&&activeTab!=='dashboard'&&(<div className="dash-card"><h3>{activeTab}</h3><p className="text-muted">Content available</p></div>)}
+         {/* Other tabs */}
+        {['messages','notifications','applied','release','dispute','agreements','payments'].includes(activeTab) && activeTab!=='verification' && activeTab!=='password' && activeTab!=='dashboard' && activeTab!=='jobs' && (<div className="dash-card"><h3>{activeTab.charAt(0).toUpperCase()+activeTab.slice(1)}</h3><p className="text-muted">Content available</p></div>)}
       </div>
     </div>
   );
