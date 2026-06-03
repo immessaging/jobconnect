@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAgentJobs, postJob, submitVerification, uploadToCloudinary } from '../services/api';
+import { getJobs, submitVerification, getUserProfile } from '../services/api';
 import './Dashboard.css';
 
 function AgentDashboard() {

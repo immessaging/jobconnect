@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { submitVerification } from '../services/api';
 import './Dashboard.css';
-
+import { getJobs, submitVerification, getUserProfile } from '../services/api';
 function StaffDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
