@@ -235,11 +235,12 @@ const handleVerifyAction = async (userId, action) => {
           <button className={`nav-item ${activeTab==='courses'?'active':''}`} onClick={()=>setActiveTab('courses')}>📚 <span className="sidebar-text">Courses</span></button>
           <button className={`nav-item ${activeTab==='services'?'active':''}`} onClick={()=>setActiveTab('services')}>🔧 <span className="sidebar-text">Services</span></button>
           <hr className="sidebar-divider" />
-          <button className="nav-item logout-btn" onClick={handleLogout}>🚪 <span className="sidebar-text">Logout</span></button>
-       
-<button className={`nav-item ${activeTab==='communication'?'active':''}`} onClick={()=>setActiveTab('communication')}>
+          <button className={`nav-item ${activeTab==='communication'?'active':''}`} onClick={()=>setActiveTab('communication')}>
   <i className="fas fa-comments"></i> <span className="sidebar-text">Communication</span>
 </button>
+          <button className="nav-item logout-btn" onClick={handleLogout}>🚪 <span className="sidebar-text">Logout</span></button>
+       
+
 
         </nav>
       </div>
