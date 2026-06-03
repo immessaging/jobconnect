@@ -1380,6 +1380,60 @@ def admin_send_sms():
         return jsonify({"success": True, "message": "SMS logged. SMS gateway integration needed."}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
+    # ============================================
+# GET USER FULL PROFILE
+# ============================================
+@app.route('/api/user/profile/<user_id>', methods=['GET'])
+def get_user_profile(user_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Get user data
+        cur.execute("""
+            SELECT id, email, phone, user_type, is_verified, full_name,
+                   date_of_birth, address, city, state, nin, bvn,
+                   bank_name, account_number, account_name,
+                   guarantor_name, guarantor_phone, guarantor_address,
+                   next_of_kin_name, next_of_kin_phone, next_of_kin_address,
+                   emergency_contact_name, emergency_contact_phone,
+                   social_media_1, social_media_2, verification_status,
+                   passport_photo, government_id_photo,
+                   gps_latitude, gps_longitude, last_location_update,
+                   created_at, updated_at
+            FROM users WHERE id = %s
+        """, (user_id,))
+        
+        user = cur.fetchone()
+        
+        if not user:
+            cur.close(); conn.close()
+            return jsonify({"success": False, "error": "User not found"}), 404
+        
+        profile = {
+            "id": str(user[0]), "email": user[1], "phone": user[2],
+            "user_type": user[3], "is_verified": user[4], "full_name": user[5],
+            "date_of_birth": str(user[6]) if user[6] else None,
+            "address": user[7], "city": user[8], "state": user[9],
+            "nin": user[10], "bvn": user[11],
+            "bank_name": user[12], "account_number": user[13], "account_name": user[14],
+            "guarantor_name": user[15], "guarantor_phone": user[16], "guarantor_address": user[17],
+            "next_of_kin_name": user[18], "next_of_kin_phone": user[19], "next_of_kin_address": user[20],
+            "emergency_contact_name": user[21], "emergency_contact_phone": user[22],
+            "social_media_1": user[23], "social_media_2": user[24],
+            "verification_status": user[25],
+            "passport_photo": user[26], "government_id_photo": user[27],
+            "gps_latitude": str(user[28]) if user[28] else None,
+            "gps_longitude": str(user[29]) if user[29] else None,
+            "last_location_update": str(user[30]) if user[30] else None,
+            "created_at": str(user[31]), "updated_at": str(user[32])
+        }
+        
+        cur.close(); conn.close()
+        return jsonify({"success": True, "profile": profile}), 200
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 # ============================================
 # RUN APPLICATION
 # ============================================

@@ -170,7 +170,15 @@ const handleStartCall = () => {
       () => setShowLocationOverlay(false), { enableHighAccuracy: true, timeout: 20000 }
     );
   };
+const [profileData, setProfileData] = useState(null);
 
+useEffect(() => {
+  if (user?.id) {
+    getUserProfile(user.id)
+      .then(res => setProfileData(res.data.profile))
+      .catch(console.log);
+  }
+}, [user]);
   const handlePasswordChange = () => {
     setPasswordMsg('');
     if (!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm) { setPasswordMsg('❌ All fields required'); return; }
@@ -321,6 +329,33 @@ const handleStartCall = () => {
   </div>
 )}
 
+{activeTab === 'profile' && (
+  <div className="dash-card form-card">
+    <h3>👤 My Profile</h3>
+    {profileData ? (
+      <>
+        <div className="form-group"><label>Full Name</label><input type="text" value={profileData.full_name || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>Email Address</label><input type="email" value={profileData.email || ''} readOnly /></div>
+        <div className="form-group"><label>Phone Number</label><input type="tel" value={profileData.phone || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>Date of Birth</label><input type="text" value={profileData.date_of_birth || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>Address</label><input type="text" value={profileData.address || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>City</label><input type="text" value={profileData.city || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>State</label><input type="text" value={profileData.state || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>NIN</label><input type="text" value={profileData.nin || 'Not set'} readOnly /></div>
+        {profileData.user_type !== 'job_seeker' && (
+          <>
+            <div className="form-group"><label>BVN</label><input type="text" value={profileData.bvn || 'Not set'} readOnly /></div>
+            <div className="form-group"><label>Bank Name</label><input type="text" value={profileData.bank_name || 'Not set'} readOnly /></div>
+            <div className="form-group"><label>Account Number</label><input type="text" value={profileData.account_number || 'Not set'} readOnly /></div>
+          </>
+        )}
+        <div className="form-group"><label>Verification Status</label><input type="text" value={profileData.verification_status || 'pending'} readOnly style={{color: profileData.is_verified ? '#28a745' : '#dc3545', fontWeight: 'bold'}} /></div>
+      </>
+    ) : (
+      <p className="text-muted">Loading profile...</p>
+    )}
+  </div>
+)}
 {/* Agent Calls Tab */}
 {activeTab==='agent-calls'&&(
   <div className="dash-card">

@@ -26,7 +26,15 @@ function JobSeekerDashboard() {
   });
   const [verifyMsg, setVerifyMsg] = useState('');
   const [verifyLoading, setVerifyLoading] = useState(false);
+const [profileData, setProfileData] = useState(null);
 
+useEffect(() => {
+  if (user?.id) {
+    getUserProfile(user.id)
+      .then(res => setProfileData(res.data.profile))
+      .catch(console.log);
+  }
+}, [user]);
   const [agreements, setAgreements] = useState([]);
   const [disputeData, setDisputeData] = useState({ type: 'refund', what: '', where: '', when: '', why: '' });
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
@@ -208,41 +216,30 @@ function JobSeekerDashboard() {
 {activeTab === 'profile' && (
   <div className="dash-card form-card">
     <h3>👤 My Profile</h3>
-    <div className="form-group">
-      <label>Full Name</label>
-      <input type="text" defaultValue={user?.full_name || ''} readOnly />
-    </div>
-    <div className="form-group">
-      <label>Email Address</label>
-      <input type="email" value={user?.email || ''} readOnly />
-    </div>
-    <div className="form-group">
-      <label>Phone Number</label>
-      <input type="tel" defaultValue={user?.phone || ''} readOnly />
-    </div>
-    <div className="form-group">
-      <label>User Type</label>
-      <input type="text" value="Job Seeker" readOnly />
-    </div>
-    <div className="form-group">
-      <label>Verification Status</label>
-      <input type="text" value={isVerified ? 'Verified' : 'Pending'} readOnly style={{color: isVerified ? '#28a745' : '#dc3545', fontWeight: 'bold'}} />
-    </div>
-    <div className="form-group">
-      <label>Date of Birth</label>
-      <input type="text" defaultValue={user?.date_of_birth || 'Not set'} readOnly />
-    </div>
-    <div className="form-group">
-      <label>Address</label>
-      <input type="text" defaultValue={user?.address || 'Not set'} readOnly />
-    </div>
-    <div className="form-group">
-      <label>NIN</label>
-      <input type="text" defaultValue={user?.nin || 'Not set'} readOnly />
-    </div>
+    {profileData ? (
+      <>
+        <div className="form-group"><label>Full Name</label><input type="text" value={profileData.full_name || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>Email Address</label><input type="email" value={profileData.email || ''} readOnly /></div>
+        <div className="form-group"><label>Phone Number</label><input type="tel" value={profileData.phone || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>Date of Birth</label><input type="text" value={profileData.date_of_birth || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>Address</label><input type="text" value={profileData.address || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>City</label><input type="text" value={profileData.city || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>State</label><input type="text" value={profileData.state || 'Not set'} readOnly /></div>
+        <div className="form-group"><label>NIN</label><input type="text" value={profileData.nin || 'Not set'} readOnly /></div>
+        {profileData.user_type !== 'job_seeker' && (
+          <>
+            <div className="form-group"><label>BVN</label><input type="text" value={profileData.bvn || 'Not set'} readOnly /></div>
+            <div className="form-group"><label>Bank Name</label><input type="text" value={profileData.bank_name || 'Not set'} readOnly /></div>
+            <div className="form-group"><label>Account Number</label><input type="text" value={profileData.account_number || 'Not set'} readOnly /></div>
+          </>
+        )}
+        <div className="form-group"><label>Verification Status</label><input type="text" value={profileData.verification_status || 'pending'} readOnly style={{color: profileData.is_verified ? '#28a745' : '#dc3545', fontWeight: 'bold'}} /></div>
+      </>
+    ) : (
+      <p className="text-muted">Loading profile...</p>
+    )}
   </div>
 )}
-
 {/* Edit Profile Tab */}
 {activeTab === 'edit-profile' && (
   <div className="dash-card form-card">
