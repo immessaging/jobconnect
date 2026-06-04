@@ -2,10 +2,30 @@ services:
   - type: web
     name: jobconnect-api
     env: python
+    region: frankfurt
+    plan: starter
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:app --workers 4 --timeout 120 --bind 0.0.0.0:$PORT
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: jobconnect-db
-          property: connectionString
+        sync: false  # Set in Render dashboard only
+      - key: SENDGRID_API_KEY
+        sync: false  # Set in Render dashboard only
+      - key: SECRET_KEY
+        generateValue: true  # Auto-generate secure key
+      - key: FROM_EMAIL
+        value: noreply@jobconnect.ng
+      - key: FROM_NAME
+        value: JobConnect Nigeria
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    healthCheckPath: /
+    autoDeploy: true
+
+databases:
+  - name: jobconnect-db
+    plan: starter
+    region: frankfurt
+    postgresMajorVersion: 15

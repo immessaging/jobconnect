@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import psycopg2
 import os
 import json
@@ -9,88 +11,238 @@ from dotenv import load_dotenv
 from datetime import datetime
 import sendgrid
 from sendgrid.helpers.mail import Mail, Email, To, Content
+import hashlib
+import bcrypt
+from functools import wraps
 
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
 
-# Database connection helper
+# CORS Configuration
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "https://jobconnect-sage.vercel.app",
+            "http://localhost:3000",
+            "http://localhost:5000"
+        ],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-User-Data", "X-Admin-Id"],
+        "supports_credentials": True
+    }
+})
+
+# Rate Limiting Configuration
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# Database connection helper with robust error handling
 def get_db_connection():
-    return psycopg2.connect(os.environ.get('DATABASE_URL'))
+    try:
+        database_url = os.environ.get('DATABASE_URL')
+        if not database_url:
+            raise ValueError("DATABASE_URL not configured")
+        conn = psycopg2.connect(database_url)
+        return conn
+    except Exception as e:
+        print(f"❌ Database connection error: {e}")
+        return None
 
-# SendGrid Configuration
-SENDGRID_API_KEY = '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'
-FROM_EMAIL = 'noreply@jobconnect.ng'
+# SendGrid Configuration - Secure from environment
+SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY', '')
+FROM_EMAIL = os.environ.get('FROM_EMAIL', 'noreply@jobconnect.ng')
 FROM_NAME = 'JobConnect Nigeria'
+
+# Password hashing configuration
+PASSWORD_SALT_ROUNDS = 12  # For bcrypt
+
+def hash_password(password):
+    """Hash password consistently using bcrypt with SHA256 fallback"""
+    try:
+        # Primary: bcrypt
+        import bcrypt
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(PASSWORD_SALT_ROUNDS)).decode('utf-8')
+    except:
+        # Fallback: SHA256
+        return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password, stored_hash):
+    """Verify password against stored hash"""
+    if not password or not stored_hash:
+        return False
+    
+    # Try bcrypt first
+    if stored_hash.startswith('$2b$'):
+        try:
+            import bcrypt
+            return bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
+        except:
+            pass
+    
+    # Try SHA256
+    input_hashed = hashlib.sha256(password.encode()).hexdigest()
+    if input_hashed == stored_hash:
+        return True
+    
+    return False
+
+# Standard response helpers
+def success_response(data=None, message=None, status_code=200):
+    """Standard success response"""
+    response = {"success": True}
+    if data is not None:
+        response["data"] = data
+    if message:
+        response["message"] = message
+    return jsonify(response), status_code
+
+def error_response(error, status_code=400, data=None):
+    """Standard error response"""
+    response = {
+        "success": False,
+        "error": error,
+        "code": status_code
+    }
+    if data:
+        response["data"] = data
+    return jsonify(response), status_code
+
+# Admin authorization decorator
+def require_admin(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        admin_data = request.headers.get('X-User-Data')
+        
+        if not auth_header and not admin_data:
+            return error_response("Authorization required", 401)
+        
+        try:
+            if admin_data:
+                user = json.loads(admin_data)
+                if user.get('adminLevel') in ['admin', 'admin2', 'admin1', 'admin2_70']:
+                    return f(*args, **kwargs)
+        except:
+            pass
+        
+        return error_response("Admin access required", 403)
+    return decorated_function
+
+def safe_str(value):
+    """Safely convert value to string"""
+    return str(value) if value is not None else None
+
+def safe_float(value):
+    """Safely convert value to float"""
+    return float(value) if value is not None else 0.0
+
+def safe_int(value):
+    """Safely convert value to int"""
+    return int(value) if value is not None else 0
 
 # ============================================
 # HOME ROUTE
 # ============================================
 @app.route('/')
 def home():
-    return jsonify({
-        "app": "JobConnect Nigeria",
-        "status": "Running",
-        "version": "2.0.0",
-        "database": "Connected"
-    })
+    return success_response(
+        data={
+            "app": "JobConnect Nigeria",
+            "status": "Running",
+            "version": "2.1.0",
+            "database": "Connected"
+        }
+    )
 
 # ============================================
 # JOB SEEKER ROUTES
 # ============================================
 
 @app.route('/api/jobs', methods=['GET'])
+@limiter.limit("30 per minute")
 def get_jobs():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
-        conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
             SELECT id, job_title, qualification_requirements, experience_requirements, 
                    required_skills, salary_range_min, salary_range_max, salary_type,
                    verification_badge, status, created_at
-            FROM job_listings WHERE status = 'active' ORDER BY created_at DESC
+            FROM job_listings 
+            WHERE status = 'active' 
+            ORDER BY created_at DESC
         """)
+        
         jobs = []
         for row in cur.fetchall():
             jobs.append({
-                "id": str(row[0]), "title": row[1], "qualification": row[2],
-                "experience": row[3], "skills": row[4],
-                "salary_min": float(row[5]) if row[5] else 0,
-                "salary_max": float(row[6]) if row[6] else 0,
-                "salary_type": row[7], "verified_badge": row[8], "status": row[9],
-                "posted_date": str(row[10])
+                "id": safe_str(row[0]),
+                "title": row[1],
+                "qualification": row[2],
+                "experience": row[3],
+                "skills": row[4],
+                "salary_min": safe_float(row[5]),
+                "salary_max": safe_float(row[6]),
+                "salary_type": row[7],
+                "verified_badge": row[8],
+                "status": row[9],
+                "posted_date": safe_str(row[10])
             })
-        cur.close(); conn.close()
-        return jsonify({"success": True, "jobs": jobs, "count": len(jobs)})
+        
+        return success_response(data={"jobs": jobs, "count": len(jobs)})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
+    finally:
+        cur.close()
+        conn.close()
 
 @app.route('/api/jobs/<job_id>', methods=['GET'])
+@limiter.limit("30 per minute")
 def get_job_detail(job_id):
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
-        conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
             SELECT id, job_title, qualification_requirements, experience_requirements,
                    required_skills, salary_range_min, salary_range_max, salary_type,
                    verification_badge, status, created_at
-            FROM job_listings WHERE id = %s AND status = 'active'
+            FROM job_listings 
+            WHERE id = %s AND status = 'active'
         """, (job_id,))
+        
         job = cur.fetchone()
-        cur.close(); conn.close()
         if not job:
-            return jsonify({"success": False, "error": "Job not found"}), 404
-        return jsonify({"success": True, "job": {
-            "id": str(job[0]), "title": job[1], "qualification": job[2],
-            "experience": job[3], "skills": job[4],
-            "salary_min": float(job[5]) if job[5] else 0,
-            "salary_max": float(job[6]) if job[6] else 0,
-            "salary_type": job[7], "verified_badge": job[8], "status": job[9],
-            "posted_date": str(job[10])
+            return error_response("Job not found", 404)
+        
+        return success_response(data={"job": {
+            "id": safe_str(job[0]),
+            "title": job[1],
+            "qualification": job[2],
+            "experience": job[3],
+            "skills": job[4],
+            "salary_min": safe_float(job[5]),
+            "salary_max": safe_float(job[6]),
+            "salary_type": job[7],
+            "verified_badge": job[8],
+            "status": job[9],
+            "posted_date": safe_str(job[10])
         }})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
+    finally:
+        cur.close()
+        conn.close()
 
 # ============================================
 # AGENT ROUTES
@@ -98,8 +250,11 @@ def get_job_detail(job_id):
 
 @app.route('/api/agent/<agent_id>/jobs', methods=['GET'])
 def get_agent_jobs(agent_id):
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
-        conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
             SELECT j.id, j.job_title, j.qualification_requirements, j.experience_requirements,
@@ -110,31 +265,110 @@ def get_agent_jobs(agent_id):
             FROM job_listings j
             LEFT JOIN commission_agreements ca ON j.id = ca.job_id
             WHERE j.agent_id = %s
-            GROUP BY j.id ORDER BY j.created_at DESC
+            GROUP BY j.id 
+            ORDER BY j.created_at DESC
         """, (agent_id,))
+        
         jobs = []
         for row in cur.fetchall():
             jobs.append({
-                "id": str(row[0]), "title": row[1], "qualification": row[2],
-                "experience": row[3], "skills": row[4],
-                "salary_min": float(row[5]) if row[5] else 0,
-                "salary_max": float(row[6]) if row[6] else 0,
-                "salary_type": row[7], "organization": row[8],
-                "contact_person": row[9], "contact_email": row[10],
-                "contact_phone": row[11], "badge": row[12], "status": row[13],
-                "created": str(row[14]), "applications": row[15]
+                "id": safe_str(row[0]),
+                "title": row[1],
+                "qualification": row[2],
+                "experience": row[3],
+                "skills": row[4],
+                "salary_min": safe_float(row[5]),
+                "salary_max": safe_float(row[6]),
+                "salary_type": row[7],
+                "organization": row[8],
+                "contact_person": row[9],
+                "contact_email": row[10],
+                "contact_phone": row[11],
+                "badge": row[12],
+                "status": row[13],
+                "created": safe_str(row[14]),
+                "applications": safe_int(row[15])
             })
-        cur.close(); conn.close()
-        return jsonify({"success": True, "jobs": jobs, "count": len(jobs)})
+        
+        return success_response(data={"jobs": jobs, "count": len(jobs)})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
+    finally:
+        cur.close()
+        conn.close()
 
+# ============================================
+# UNIFIED JOB POSTING WITH KYC CHECK
+# ============================================
 @app.route('/api/agent/post-job', methods=['POST'])
-def post_job():
+@limiter.limit("10 per hour")
+def post_job_with_kyc():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
         data = request.json
-        conn = get_db_connection()
+        if not data:
+            return error_response("Request body is required", 400)
+        
+        agent_id = data.get('agent_id')
+        if not agent_id:
+            return error_response("Agent ID is required", 400)
+        
+        # Validate required fields
+        required_fields = ['job_title', 'qualification_requirements', 'experience_requirements', 
+                          'organization_name', 'salary_range_min', 'salary_range_max']
+        for field in required_fields:
+            if not data.get(field):
+                return error_response(f"{field} is required", 400)
+        
         cur = conn.cursor()
+        
+        # Check user exists
+        cur.execute("SELECT id FROM users WHERE id = %s", (agent_id,))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            return error_response("Agent not found", 404)
+        
+        # Check KYC and admin verification status
+        cur.execute("""
+            SELECT kyc_status, bvn_verified, nin_verified, is_verified, verification_status
+            FROM users WHERE id = %s
+        """, (agent_id,))
+        user = cur.fetchone()
+        
+        if not user:
+            cur.close()
+            conn.close()
+            return error_response("User not found", 404)
+        
+        # Allow posting if admin verified or KYC approved
+        is_admin_verified = user[3] if user else False
+        is_kyc_approved = user[0] == 'approved' if user else False
+        is_verification_complete = user[4] == 'verified' if user else False
+        
+        can_post = is_admin_verified or is_kyc_approved or is_verification_complete
+        
+        if not can_post:
+            cur.close()
+            conn.close()
+            return error_response(
+                "Complete verification before posting jobs. Please verify your BVN, NIN, and upload utility bill.",
+                403,
+                data={
+                    "kyc_required": True,
+                    "kyc_status": {
+                        "bvn_verified": bool(user[1]),
+                        "nin_verified": bool(user[2]),
+                        "kyc_status": user[0] or 'not_started',
+                        "admin_verified": bool(user[3])
+                    }
+                }
+            )
+        
+        # Proceed with job posting - parameterized query
         cur.execute("""
             INSERT INTO job_listings (
                 agent_id, job_title, qualification_requirements,
@@ -147,255 +381,260 @@ def post_job():
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'active')
             RETURNING id
         """, (
-            data['agent_id'], data['job_title'], data['qualification_requirements'],
-            data['experience_requirements'], data.get('required_skills', ''),
-            data['salary_range_min'], data['salary_range_max'],
-            data.get('salary_type', 'monthly'), data['organization_name'],
-            data.get('organization_contact_person', ''), data.get('organization_email', ''),
+            agent_id,
+            data['job_title'],
+            data['qualification_requirements'],
+            data['experience_requirements'],
+            data.get('required_skills', ''),
+            data['salary_range_min'],
+            data['salary_range_max'],
+            data.get('salary_type', 'monthly'),
+            data['organization_name'],
+            data.get('organization_contact_person', ''),
+            data.get('organization_email', ''),
             data.get('organization_phone', ''),
             data.get('commission_percentage', 15),
             data.get('is_negotiable', True),
             data.get('has_interview', False),
             data.get('has_exam', False)
         ))
+        
         job_id = cur.fetchone()[0]
+        
+        # Log activity with parameterized query
+        cur.execute("""
+            INSERT INTO activity_logs (user_id, activity_type, activity_description, module, severity, ip_address)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (agent_id, 'job_posted', f"Posted job: {data['job_title']}", 'jobs', 'info', request.remote_addr))
+        
         conn.commit()
-        cur.close(); conn.close()
-        return jsonify({"success": True, "message": "Job posted", "job_id": str(job_id)}), 201
+        
+        return success_response(
+            data={"job_id": safe_str(job_id)},
+            message="Job posted successfully",
+            status_code=201
+        )
+        
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
- # ============================================
-# USER LOGIN
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        if 'cur' in locals():
+            cur.close()
+        conn.close()
+
+# ============================================
+# USER LOGIN - Secure with consistent hashing
 # ============================================
 @app.route('/api/auth/login', methods=['POST'])
+@limiter.limit("10 per minute")
 def login():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
         data = request.json
+        if not data:
+            return error_response("Request body is required", 400)
+        
         email = data.get('email')
         password = data.get('password')
         
-        conn = get_db_connection()
+        if not email or not password:
+            return error_response("Email and password required", 400)
+        
+        # Validate email format
+        if '@' not in email:
+            return error_response("Invalid email format", 400)
+        
         cur = conn.cursor()
         
+        # Parameterized query to prevent SQL injection
         cur.execute("""
-            SELECT id, email, user_type, is_verified, password_hash
+            SELECT id, email, user_type, is_verified, password_hash, verification_status
             FROM users WHERE email = %s
         """, (email,))
         
         user = cur.fetchone()
-        cur.close()
-        conn.close()
         
         if not user:
-            return jsonify({"success": False, "error": "Invalid email or password"}), 401
+            return error_response("Invalid email or password", 401)
         
         stored_password = user[4]
-        import hashlib
         
-        # Try SHA256 first
-        input_hashed = hashlib.sha256(password.encode()).hexdigest()
-        if input_hashed == stored_password:
-            return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
+        # Use consistent password verification
+        if not verify_password(password, stored_password):
+            return error_response("Invalid email or password", 401)
         
-        # Try bcrypt with auto-upgrade
-        if stored_password.startswith('$2b$'):
-            try:
-                import bcrypt
-                if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
-                    new_hash = hashlib.sha256(password.encode()).hexdigest()
-                    try:
-                        conn = get_db_connection()
-                        cur = conn.cursor()
-                        cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, str(user[0])))
-                        conn.commit()
-                        cur.close(); conn.close()
-                    except: pass
-                    return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
-            except: pass
+        # Log access with parameterized query
+        cur.execute("""
+            INSERT INTO access_logs (user_id, user_email, user_type, page_accessed, ip_address, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (safe_str(user[0]), user[1], user[2], '/login', request.remote_addr, 
+              request.headers.get('User-Agent', '')))
         
-        # Try plain text and auto-upgrade
-        if password == stored_password:
-            new_hash = hashlib.sha256(password.encode()).hexdigest()
-            try:
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, str(user[0])))
-                conn.commit()
-                cur.close(); conn.close()
-            except: pass
-            return jsonify({"success": True, "user": {"id": str(user[0]), "email": user[1], "user_type": user[2], "is_verified": user[3]}}), 200
+        # Log activity with parameterized query
+        cur.execute("""
+            INSERT INTO activity_logs (user_id, user_email, activity_type, activity_description, module, severity, ip_address)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (safe_str(user[0]), user[1], 'login', 'User logged in successfully', 'auth', 'info', request.remote_addr))
         
-        return jsonify({"success": False, "error": "Invalid email or password"}), 401
+        conn.commit()
+        
+        return success_response(data={
+            "user": {
+                "id": safe_str(user[0]),
+                "email": user[1],
+                "user_type": user[2],
+                "is_verified": user[3],
+                "verification_status": user[5]
+            }
+        })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+        return error_response(str(e), 400)
+    finally:
+        if 'cur' in locals():
+            cur.close()
+        conn.close()
+
 # ============================================
-# USER REGISTRATION (with Welcome Email)
+# USER REGISTRATION - Secure with hashing
 # ============================================
 @app.route('/api/auth/register', methods=['POST'])
+@limiter.limit("5 per hour")
 def register():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
         data = request.json
+        if not data:
+            return error_response("Request body is required", 400)
+        
+        # Validate required fields
         required = ['email', 'phone', 'password', 'user_type']
         for field in required:
             if field not in data:
-                return jsonify({"success": False, "error": f"{field} is required"}), 400
+                return error_response(f"{field} is required", 400)
         
+        # Validate email format
+        email = data['email']
+        if '@' not in email:
+            return error_response("Invalid email format", 400)
+        
+        # Validate phone format (Nigerian)
+        phone = data['phone']
+        if not phone.startswith('0') and not phone.startswith('+234'):
+            return error_response("Invalid phone number format", 400)
+        
+        # Validate user type
         valid_types = ['agent', 'job_seeker']
         if data['user_type'] not in valid_types:
-            return jsonify({"success": False, "error": "Invalid user type"}), 400
+            return error_response("Invalid user type. Must be 'agent' or 'job_seeker'", 400)
         
-        conn = get_db_connection()
+        # Validate password strength
+        password = data['password']
+        if len(password) < 6:
+            return error_response("Password must be at least 6 characters", 400)
+        
         cur = conn.cursor()
         
-        cur.execute("SELECT id FROM users WHERE email = %s", (data['email'],))
+        # Check existing email - parameterized query
+        cur.execute("SELECT id FROM users WHERE email = %s", (email,))
         if cur.fetchone():
-            cur.close(); conn.close()
-            return jsonify({"success": False, "error": "Email already registered"}), 409
+            cur.close()
+            conn.close()
+            return error_response("Email already registered", 409)
         
-        cur.execute("SELECT id FROM users WHERE phone = %s", (data['phone'],))
+        # Check existing phone - parameterized query
+        cur.execute("SELECT id FROM users WHERE phone = %s", (phone,))
         if cur.fetchone():
-            cur.close(); conn.close()
-            return jsonify({"success": False, "error": "Phone already registered"}), 409
+            cur.close()
+            conn.close()
+            return error_response("Phone number already registered", 409)
         
-        # Hash the password
-        import hashlib
-        hashed = hashlib.sha256(data['password'].encode()).hexdigest()
+        # Hash password consistently
+        hashed_password = hash_password(password)
         
+        # Insert user - parameterized query
         cur.execute("""
             INSERT INTO users (email, phone, password_hash, user_type)
-            VALUES (%s, %s, %s, %s) RETURNING id
-        """, (data['email'], data['phone'], hashed, data['user_type']))
+            VALUES (%s, %s, %s, %s) 
+            RETURNING id
+        """, (email, phone, hashed_password, data['user_type']))
         
         user_id = cur.fetchone()[0]
         conn.commit()
-        cur.close()
+        
+        # Send welcome email if SendGrid configured
+        if SENDGRID_API_KEY:
+            try:
+                sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+                from_email = Email(FROM_EMAIL, FROM_NAME)
+                to_email = To(email)
+                content = Content("text/html", f'''
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+                        <h2 style="color:#d4a843;">Welcome to JobConnect Nigeria!</h2>
+                        <p>Thank you for registering!</p>
+                        <p>Complete your profile verification to start accessing all features.</p>
+                        <a href="https://jobconnect-sage.vercel.app/dashboard" 
+                           style="background:#d42027;color:white;padding:12px 24px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:15px;">
+                           Go to Dashboard
+                        </a>
+                    </div>''')
+                mail = Mail(from_email, to_email, "Welcome to JobConnect Nigeria!", content)
+                sg.client.mail.send.post(request_body=mail.get())
+            except Exception as e:
+                print(f"Email send failed: {e}")
+        
+        return success_response(
+            data={"user_id": safe_str(user_id)},
+            message="Registration successful",
+            status_code=201
+        )
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        if 'cur' in locals():
+            cur.close()
         conn.close()
-        
-        # Send welcome email
-        try:
-            sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-            from_email = Email(FROM_EMAIL, FROM_NAME)
-            to_email = To(data['email'])
-            content = Content("text/html", f'''
-                <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-                    <h2 style="color:#d4a843;">Welcome to JobConnect Nigeria!</h2>
-                    <p>Thank you for registering!</p>
-                    <p>Complete your profile to start finding verified jobs.</p>
-                    <a href="https://jobconnect-sage.vercel.app/dashboard/seeker" 
-                       style="background:#d42027;color:white;padding:12px 24px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:15px;">
-                       Go to Dashboard
-                    </a>
-                </div>''')
-            mail = Mail(from_email, to_email, "Welcome to JobConnect Nigeria!", content)
-            sg.client.mail.send.post(request_body=mail.get())
-        except:
-            pass
-        
-        return jsonify({"success": True, "message": "Registration successful", "user_id": str(user_id)}), 201
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-        
 
 # ============================================
-# TEST DATA ENDPOINT
-# ============================================
-@app.route('/api/test-data')
-def test_data():
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute('SELECT id, email, user_type, is_verified FROM users')
-        users = [{"id": str(u[0]), "email": u[1], "type": u[2], "verified": u[3]} for u in cur.fetchall()]
-        cur.close(); conn.close()
-        return jsonify({"success": True, "users": users, "total_users": len(users)})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-# ============================================
-# GET TESTIMONIALS
-# ============================================
-@app.route('/api/testimonials', methods=['GET'])
-def get_testimonials():
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT id, name, role, company, text, rating, is_verified, created_at
-            FROM testimonials WHERE is_active = TRUE ORDER BY created_at DESC
-        """)
-        testimonials = []
-        for row in cur.fetchall():
-            testimonials.append({
-                "id": str(row[0]), "name": row[1], "role": row[2],
-                "company": row[3], "text": row[4], "rating": row[5],
-                "is_verified": row[6], "created_at": str(row[7])
-            })
-        cur.close(); conn.close()
-        return jsonify({"success": True, "testimonials": testimonials})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# ============================================
-# PLATFORM STATS FOR HOMEPAGE
-# ============================================
-@app.route('/api/stats', methods=['GET'])
-def get_platform_stats():
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        stats = {}
-        cur.execute("SELECT COUNT(*) FROM job_listings WHERE status = 'active'")
-        stats['active_jobs'] = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM job_listings WHERE status = 'filled'")
-        stats['jobs_secured'] = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM users")
-        stats['total_users'] = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM users WHERE user_type = 'agent' AND is_verified = true")
-        stats['verified_agents'] = cur.fetchone()[0]
-        cur.execute("SELECT COALESCE(SUM(commission_amount), 0) FROM commission_agreements WHERE payment_status = 'paid'")
-        stats['total_commission'] = float(cur.fetchone()[0])
-        cur.close(); conn.close()
-        return jsonify({"success": True, "stats": stats})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# ============================================
-# CONTACT FORM ENDPOINT
-# ============================================
-@app.route('/api/contact', methods=['POST'])
-def contact_form():
-    try:
-        data = request.json
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO contact_messages (name, email, subject, message, ip_address, user_agent)
-            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-        """, (data['name'], data['email'], data['subject'], data['message'],
-              request.remote_addr, request.headers.get('User-Agent', '')))
-        msg_id = cur.fetchone()[0]
-        conn.commit()
-        cur.close(); conn.close()
-        return jsonify({"success": True, "message": "Message sent", "id": str(msg_id)}), 201
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# ============================================
-# SUBMIT VERIFICATION (Per User Type)
+# VERIFICATION SUBMISSION - SQL Injection Safe
 # ============================================
 @app.route('/api/verify/submit', methods=['POST'])
+@limiter.limit("5 per day")
 def submit_verification():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
         data = request.json
+        if not data:
+            return error_response("Request body is required", 400)
+        
         user_id = data.get('user_id')
         user_type = data.get('user_type', 'job_seeker')
         email = data.get('email', '')
         
-        conn = get_db_connection()
+        if not user_id:
+            return error_response("User ID is required", 400)
+        
+        # Validate user type
+        if user_type not in ['job_seeker', 'agent', 'staff']:
+            return error_response("Invalid user type", 400)
+        
         cur = conn.cursor()
         
+        # Build safe update query based on user type
+        # All queries use parameterized placeholders
         if user_type == 'job_seeker':
-            # Job Seeker: 11 fields + user_id = 12 placeholders
             cur.execute("""
                 UPDATE users SET 
                     verification_status = 'pending',
@@ -421,7 +660,6 @@ def submit_verification():
             ))
             
         elif user_type in ('agent', 'staff'):
-            # Agent/Staff: 19 fields + user_id = 20 placeholders
             cur.execute("""
                 UPDATE users SET 
                     verification_status = 'pending',
@@ -456,43 +694,704 @@ def submit_verification():
                 data.get('social_media_1'), data.get('social_media_2'), user_id
             ))
         
-        # Log activity
+        # Log activity with parameterized query
         cur.execute("""
             INSERT INTO activity_logs (user_id, user_email, activity_type, 
                 activity_description, module, severity, ip_address)
-            VALUES (%s, %s, 'verification_submitted', %s, 'verification', 'info', %s)
-        """, (user_id, email, f'{user_type} submitted verification', request.remote_addr))
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (user_id, email, 'verification_submitted', 
+              f'{user_type} submitted verification', 'verification', 'info', 
+              request.remote_addr))
         
-        # Send email notification
-        try:
-            sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-            mail = Mail(
-                Email(FROM_EMAIL, FROM_NAME),
-                To(email),
-                "Verification Submitted - JobConnect Nigeria",
-                Content("text/html", f'<h2>Verification Submitted</h2><p>Dear {data.get("full_name", "User")},</p><p>Your documents have been received. Review takes 24-48 hours.</p>')
-            )
-            sg.client.mail.send.post(request_body=mail.get())
-        except:
-            pass
+        # Send email notification if configured
+        if SENDGRID_API_KEY and email:
+            try:
+                sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+                mail = Mail(
+                    Email(FROM_EMAIL, FROM_NAME),
+                    To(email),
+                    "Verification Submitted - JobConnect Nigeria",
+                    Content("text/html", f'''
+                        <h2>Verification Submitted</h2>
+                        <p>Dear {data.get("full_name", "User")},</p>
+                        <p>Your documents have been received. Review takes 24-48 hours.</p>
+                    ''')
+                )
+                sg.client.mail.send.post(request_body=mail.get())
+            except:
+                pass
         
         conn.commit()
-        cur.close()
-        conn.close()
         
-        return jsonify({"success": True, "message": "Verification submitted successfully!"}), 200
+        return success_response(message="Verification submitted successfully!")
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        if 'cur' in locals():
+            cur.close()
+        conn.close()
 
 # ============================================
-# GPS LOCATION TRACKING - FULL
+# ADMIN ROUTES - FULL DATABASE ACCESS
 # ============================================
-@app.route('/api/gps/track', methods=['POST'])
-def track_gps_location():
+
+@app.route('/api/admin/users', methods=['GET'])
+@require_admin
+@limiter.limit("30 per minute")
+def admin_get_all_users():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, email, phone, user_type, is_verified, verification_status,
+                   full_name, created_at, updated_at, bvn_verified, nin_verified, kyc_status
+            FROM users ORDER BY created_at DESC
+        """)
+        
+        users = []
+        for row in cur.fetchall():
+            users.append({
+                "id": safe_str(row[0]),
+                "email": row[1],
+                "phone": row[2],
+                "type": row[3],
+                "verified": row[4],
+                "verification_status": row[5],
+                "full_name": row[6],
+                "created_at": safe_str(row[7]),
+                "updated_at": safe_str(row[8]),
+                "bvn_verified": row[9],
+                "nin_verified": row[10],
+                "kyc_status": row[11]
+            })
+        
+        return success_response(data={"users": users, "count": len(users)})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/admin/user/<user_id>', methods=['GET', 'PUT', 'DELETE'])
+@require_admin
+def admin_manage_user(user_id):
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        
+        if request.method == 'GET':
+            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+            user = cur.fetchone()
+            if not user:
+                return error_response("User not found", 404)
+            
+            columns = [desc[0] for desc in cur.description]
+            user_data = {col: safe_str(user[i]) for i, col in enumerate(columns)}
+            
+            return success_response(data={"user": user_data})
+        
+        elif request.method == 'PUT':
+            data = request.json
+            if not data:
+                return error_response("Request body is required", 400)
+            
+            allowed_fields = [
+                'email', 'phone', 'user_type', 'is_verified', 'verification_status',
+                'full_name', 'address', 'city', 'state', 'nin', 'bvn'
+            ]
+            
+            updates = []
+            values = []
+            for field in allowed_fields:
+                if field in data:
+                    updates.append(f"{field} = %s")
+                    values.append(data[field])
+            
+            if not updates:
+                return error_response("No valid fields to update", 400)
+            
+            updates.append("updated_at = NOW()")
+            values.append(user_id)
+            
+            query = f"UPDATE users SET {', '.join(updates)} WHERE id = %s"
+            cur.execute(query, values)
+            
+            # Log audit
+            cur.execute("""
+                INSERT INTO audit_logs (user_id, action_type, table_affected, record_id, change_summary, ip_address)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (request.headers.get('X-Admin-Id'), 'UPDATE', 'users', user_id, 
+                  f"Updated user fields: {', '.join(data.keys())}", request.remote_addr))
+            
+            conn.commit()
+            return success_response(message="User updated successfully")
+        
+        elif request.method == 'DELETE':
+            # Soft delete
+            cur.execute("""
+                UPDATE users SET verification_status = 'deactivated', updated_at = NOW()
+                WHERE id = %s
+            """, (user_id,))
+            
+            # Log audit
+            cur.execute("""
+                INSERT INTO audit_logs (user_id, action_type, table_affected, record_id, change_summary, ip_address)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (request.headers.get('X-Admin-Id'), 'DELETE', 'users', user_id, 
+                  'User deactivated', request.remote_addr))
+            
+            conn.commit()
+            return success_response(message="User deactivated successfully")
+            
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/admin/user/<user_id>/toggle-status', methods=['POST'])
+@require_admin
+def admin_toggle_user_status(user_id):
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        
+        cur.execute("""
+            UPDATE users SET 
+                verification_status = CASE 
+                    WHEN verification_status = 'blocked' THEN 'verified'
+                    ELSE 'blocked'
+                END,
+                updated_at = NOW()
+            WHERE id = %s
+            RETURNING verification_status
+        """, (user_id,))
+        
+        result = cur.fetchone()
+        if not result:
+            return error_response("User not found", 404)
+        
+        new_status = result[0]
+        
+        # Log audit
+        cur.execute("""
+            INSERT INTO audit_logs (user_id, action_type, table_affected, record_id, change_summary, ip_address)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (request.headers.get('X-Admin-Id'), 'TOGGLE_STATUS', 'users', user_id,
+              f"Status changed to {new_status}", request.remote_addr))
+        
+        conn.commit()
+        
+        return success_response(
+            data={"new_status": new_status},
+            message=f"User status changed to {new_status}"
+        )
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/admin/user/<user_id>/reset-password', methods=['POST'])
+@require_admin
+@limiter.limit("10 per hour")
+def admin_reset_password(user_id):
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
         data = request.json
-        user_id = data.get('user_id')
-        conn = get_db_connection()
+        if not data:
+            return error_response("Request body is required", 400)
+        
+        new_password = data.get('new_password')
+        if not new_password or len(new_password) < 6:
+            return error_response("Password must be at least 6 characters", 400)
+        
+        # Hash new password
+        hashed = hash_password(new_password)
+        
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE users SET password_hash = %s, updated_at = NOW()
+            WHERE id = %s
+        """, (hashed, user_id))
+        
+        # Log audit
+        cur.execute("""
+            INSERT INTO audit_logs (user_id, action_type, table_affected, record_id, change_summary, ip_address)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (request.headers.get('X-Admin-Id'), 'PASSWORD_RESET', 'users', user_id,
+              'Password reset by admin', request.remote_addr))
+        
+        conn.commit()
+        
+        return success_response(message="Password reset successfully")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# ADMIN - VERIFICATION MANAGEMENT
+# ============================================
+
+@app.route('/api/admin/verifications', methods=['GET'])
+@require_admin
+def get_all_verifications():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, email, user_type, full_name, verification_status,
+                   passport_photo, nin, bvn, bank_name, account_number,
+                   date_of_birth, address, city, state,
+                   guarantor_name, guarantor_phone,
+                   next_of_kin_name, next_of_kin_phone,
+                   emergency_contact_name, emergency_contact_phone,
+                   social_media_1, social_media_2,
+                   created_at, updated_at
+            FROM users
+            WHERE verification_status = 'pending'
+            ORDER BY created_at DESC
+        """)
+        
+        users = []
+        for row in cur.fetchall():
+            users.append({
+                "id": safe_str(row[0]),
+                "email": row[1],
+                "user_type": row[2],
+                "full_name": row[3],
+                "verification_status": row[4],
+                "passport_photo": row[5],
+                "nin": row[6],
+                "bvn": row[7],
+                "bank_name": row[8],
+                "account_number": row[9],
+                "date_of_birth": safe_str(row[10]),
+                "address": row[11],
+                "city": row[12],
+                "state": row[13],
+                "guarantor_name": row[14],
+                "guarantor_phone": row[15],
+                "next_of_kin_name": row[16],
+                "next_of_kin_phone": row[17],
+                "emergency_contact_name": row[18],
+                "emergency_contact_phone": row[19],
+                "social_media_1": row[20],
+                "social_media_2": row[21],
+                "created_at": safe_str(row[22]),
+                "updated_at": safe_str(row[23])
+            })
+        
+        return success_response(data={"users": users, "count": len(users)})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/admin/verify/<user_id>', methods=['POST'])
+@require_admin
+def verify_user(user_id):
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        data = request.json
+        if not data:
+            return error_response("Request body is required", 400)
+        
+        action = data.get('action')
+        if action not in ['approve', 'reject']:
+            return error_response("Action must be 'approve' or 'reject'", 400)
+        
+        cur = conn.cursor()
+        
+        if action == 'approve':
+            cur.execute("""
+                UPDATE users SET 
+                    is_verified = true,
+                    verification_status = 'verified',
+                    verification_level = 1,
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (user_id,))
+        else:
+            cur.execute("""
+                UPDATE users SET 
+                    verification_status = 'rejected',
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (user_id,))
+        
+        # Log audit
+        cur.execute("""
+            INSERT INTO audit_logs (user_id, action_type, table_affected, record_id, change_summary, ip_address)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (request.headers.get('X-Admin-Id'), 'VERIFY', 'users', user_id,
+              f"User verification {action}d", request.remote_addr))
+        
+        conn.commit()
+        
+        return success_response(message=f"User {action}d successfully")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# TESTIMONIALS - With Admin Management
+# ============================================
+
+@app.route('/api/testimonials', methods=['GET'])
+def get_testimonials():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, name, role, company, text, rating, is_verified, created_at
+            FROM testimonials 
+            WHERE is_active = TRUE 
+            ORDER BY created_at DESC
+        """)
+        
+        testimonials = []
+        for row in cur.fetchall():
+            testimonials.append({
+                "id": safe_str(row[0]),
+                "name": row[1],
+                "role": row[2],
+                "company": row[3],
+                "text": row[4],
+                "rating": safe_int(row[5]),
+                "is_verified": row[6],
+                "created_at": safe_str(row[7])
+            })
+        
+        return success_response(data={"testimonials": testimonials})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/api/admin/testimonials', methods=['POST', 'PUT', 'DELETE'])
+@require_admin
+def admin_manage_testimonials():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        
+        if request.method == 'POST':
+            data = request.json
+            if not data or not data.get('name') or not data.get('text'):
+                return error_response("Name and text are required", 400)
+            
+            cur.execute("""
+                INSERT INTO testimonials (name, role, company, text, rating, is_active)
+                VALUES (%s, %s, %s, %s, %s, TRUE)
+                RETURNING id
+            """, (data['name'], data.get('role', ''), data.get('company', ''),
+                  data['text'], data.get('rating', 5)))
+            
+            testimonial_id = cur.fetchone()[0]
+            conn.commit()
+            
+            return success_response(
+                data={"id": safe_str(testimonial_id)},
+                message="Testimonial created",
+                status_code=201
+            )
+        
+        elif request.method == 'PUT':
+            data = request.json
+            if not data or not data.get('id'):
+                return error_response("Testimonial ID is required", 400)
+            
+            cur.execute("""
+                UPDATE testimonials SET 
+                    is_active = COALESCE(%s, is_active),
+                    is_verified = COALESCE(%s, is_verified)
+                WHERE id = %s
+            """, (data.get('is_active'), data.get('is_verified'), data['id']))
+            
+            conn.commit()
+            return success_response(message="Testimonial updated")
+        
+        elif request.method == 'DELETE':
+            testimonial_id = request.args.get('id')
+            if not testimonial_id:
+                return error_response("Testimonial ID is required", 400)
+            
+            cur.execute("UPDATE testimonials SET is_active = FALSE WHERE id = %s", (testimonial_id,))
+            conn.commit()
+            return success_response(message="Testimonial deleted")
+            
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# USERS LIST FOR CHAT/CALLS
+# ============================================
+@app.route('/api/users-list', methods=['GET'])
+def get_users_list():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, email, user_type, phone, is_verified
+            FROM users 
+            ORDER BY created_at DESC
+        """)
+        
+        users = [{
+            "id": safe_str(r[0]),
+            "email": r[1],
+            "user_type": r[2],
+            "phone": r[3],
+            "is_verified": r[4]
+        } for r in cur.fetchall()]
+        
+        return success_response(data={"users": users})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# TEST DATA ENDPOINT
+# ============================================
+@app.route('/api/test-data')
+def test_data():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        cur.execute('SELECT id, email, user_type, is_verified FROM users')
+        users = [{
+            "id": safe_str(u[0]),
+            "email": u[1],
+            "type": u[2],
+            "verified": u[3]
+        } for u in cur.fetchall()]
+        
+        return success_response(data={
+            "users": users,
+            "total_users": len(users)
+        })
+    except Exception as e:
+        return error_response(str(e), 500)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# ANALYTICS SUMMARY
+# ============================================
+@app.route('/api/analytics/summary', methods=['GET'])
+def get_analytics_summary():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        stats = {}
+        
+        queries = {
+            'total_users': "SELECT COUNT(*) FROM users",
+            'total_agents': "SELECT COUNT(*) FROM users WHERE user_type = 'agent'",
+            'total_seekers': "SELECT COUNT(*) FROM users WHERE user_type = 'job_seeker'",
+            'active_jobs': "SELECT COUNT(*) FROM job_listings WHERE status = 'active'",
+            'filled_jobs': "SELECT COUNT(*) FROM job_listings WHERE status = 'filled'",
+            'total_commission': "SELECT COALESCE(SUM(commission_amount), 0) FROM commission_agreements WHERE payment_status = 'paid'",
+            'pending_verifications': "SELECT COUNT(*) FROM users WHERE verification_status = 'pending'"
+        }
+        
+        for key, query in queries.items():
+            cur.execute(query)
+            result = cur.fetchone()[0]
+            stats[key] = safe_float(result) if key == 'total_commission' else safe_int(result)
+        
+        return success_response(data={"stats": stats})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# ANNOUNCEMENTS
+# ============================================
+@app.route('/api/announcements', methods=['GET'])
+def get_announcements():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, title, content, priority, target_audience, created_at
+            FROM announcements 
+            WHERE is_active = TRUE
+            AND (expires_at IS NULL OR expires_at > NOW()) 
+            ORDER BY created_at DESC
+        """)
+        
+        announcements = [{
+            "id": safe_str(r[0]),
+            "title": r[1],
+            "content": r[2],
+            "priority": r[3],
+            "audience": r[4],
+            "date": safe_str(r[5])
+        } for r in cur.fetchall()]
+        
+        return success_response(data={"announcements": announcements})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# PLATFORM STATS
+# ============================================
+@app.route('/api/stats', methods=['GET'])
+def get_platform_stats():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        cur = conn.cursor()
+        stats = {}
+        
+        queries = {
+            'active_jobs': "SELECT COUNT(*) FROM job_listings WHERE status = 'active'",
+            'jobs_secured': "SELECT COUNT(*) FROM job_listings WHERE status = 'filled'",
+            'total_users': "SELECT COUNT(*) FROM users",
+            'verified_agents': "SELECT COUNT(*) FROM users WHERE user_type = 'agent' AND is_verified = true",
+            'total_commission': "SELECT COALESCE(SUM(commission_amount), 0) FROM commission_agreements WHERE payment_status = 'paid'"
+        }
+        
+        for key, query in queries.items():
+            cur.execute(query)
+            result = cur.fetchone()[0]
+            stats[key] = safe_float(result) if key == 'total_commission' else safe_int(result)
+        
+        return success_response(data={"stats": stats})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# CONTACT FORM
+# ============================================
+@app.route('/api/contact', methods=['POST'])
+@limiter.limit("3 per hour")
+def contact_form():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        data = request.json
+        if not data:
+            return error_response("Request body is required", 400)
+        
+        required = ['name', 'email', 'subject', 'message']
+        for field in required:
+            if not data.get(field):
+                return error_response(f"{field} is required", 400)
+        
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO contact_messages (name, email, subject, message, ip_address, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (data['name'], data['email'], data['subject'], data['message'],
+              request.remote_addr, request.headers.get('User-Agent', '')))
+        
+        msg_id = cur.fetchone()[0]
+        conn.commit()
+        
+        return success_response(
+            data={"id": safe_str(msg_id)},
+            message="Message sent successfully",
+            status_code=201
+        )
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# GPS TRACKING
+# ============================================
+@app.route('/api/gps/track', methods=['POST'])
+@limiter.limit("60 per minute")
+def track_gps_location():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
+    try:
+        data = request.json
+        if not data or not data.get('latitude') or not data.get('longitude'):
+            return error_response("Latitude and longitude are required", 400)
+        
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO gps_locations (user_id, user_email, latitude, longitude, accuracy,
@@ -501,15 +1400,17 @@ def track_gps_location():
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
-            user_id, data.get('email'), data['latitude'], data['longitude'],
+            data.get('user_id'), data.get('email'), data['latitude'], data['longitude'],
             data.get('accuracy'), data.get('altitude'), data.get('speed'),
             data.get('heading'), data.get('city', ''), data.get('state', ''),
             data.get('country', 'Nigeria'), data.get('location_string', ''),
             request.remote_addr, data.get('session_id', ''),
             request.headers.get('User-Agent', '')
         ))
+        
         location_id = cur.fetchone()[0]
-        if user_id:
+        
+        if data.get('user_id'):
             cur.execute("""
                 UPDATE users SET 
                     gps_latitude = %s, gps_longitude = %s,
@@ -518,706 +1419,146 @@ def track_gps_location():
                     state = COALESCE(%s, state)
                 WHERE id = %s
             """, (data['latitude'], data['longitude'], data.get('accuracy'),
-                  data.get('city'), data.get('state'), user_id))
-        conn.commit()
-        cur.close(); conn.close()
-        return jsonify({"success": True, "message": "Location tracked", "id": str(location_id)})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-@app.route('/api/gps/history/<user_id>', methods=['GET'])
-def get_gps_history(user_id):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT id, latitude, longitude, accuracy, altitude, speed, 
-                   city, state, country, location_string, created_at
-            FROM gps_locations WHERE user_id = %s 
-            ORDER BY created_at DESC LIMIT 50
-        """, (user_id,))
-        locations = []
-        for row in cur.fetchall():
-            locations.append({
-                "id": str(row[0]), "latitude": float(row[1]) if row[1] else None,
-                "longitude": float(row[2]) if row[2] else None,
-                "accuracy": float(row[3]) if row[3] else None,
-                "altitude": float(row[4]) if row[4] else None,
-                "speed": float(row[5]) if row[5] else None,
-                "city": row[6], "state": row[7], "country": row[8],
-                "location_string": row[9], "timestamp": str(row[10])
-            })
-        cur.close(); conn.close()
-        return jsonify({"success": True, "locations": locations})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-@app.route('/api/gps/all-users', methods=['GET'])
-def get_all_user_locations():
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT DISTINCT ON (u.id) 
-                u.id, u.email, u.user_type, u.gps_latitude, u.gps_longitude,
-                u.gps_accuracy, u.city, u.state, u.last_location_update
-            FROM users u WHERE u.gps_latitude IS NOT NULL
-            ORDER BY u.id, u.last_location_update DESC
-        """)
-        users = []
-        for row in cur.fetchall():
-            users.append({
-                "id": str(row[0]), "email": row[1], "type": row[2],
-                "latitude": float(row[3]) if row[3] else None,
-                "longitude": float(row[4]) if row[4] else None,
-                "accuracy": float(row[5]) if row[5] else None,
-                "city": row[6], "state": row[7],
-                "last_update": str(row[8]) if row[8] else None
-            })
-        cur.close(); conn.close()
-        return jsonify({"success": True, "users": users})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# ============================================
-# SENDGRID EMAIL NOTIFICATIONS
-# ============================================
-@app.route('/api/email/send', methods=['POST'])
-def send_email():
-    try:
-        data = request.json
-        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-        from_email = Email(FROM_EMAIL, FROM_NAME)
-        to_email = To(data.get('to'))
-        subject = data.get('subject')
-        content = Content("text/html", data.get('body', ''))
-        mail = Mail(from_email, to_email, subject, content)
-        response = sg.client.mail.send.post(request_body=mail.get())
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO activity_logs (user_id, user_email, activity_type, 
-                activity_description, module, severity, ip_address)
-            VALUES (%s, %s, 'email_sent', %s, 'notifications', 'info', %s)
-        """, (data.get('user_id'), data.get('to'),
-              f"Email sent to {data.get('to')}: {subject}", request.remote_addr))
-        conn.commit()
-        cur.close(); conn.close()
-        return jsonify({"success": True, "message": "Email sent", "status_code": response.status_code}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-@app.route('/api/email/notify', methods=['POST'])
-def send_notification_email():
-    try:
-        data = request.json
-        email_type = data.get('type')
-        recipient = data.get('to')
-        user_name = data.get('name', 'User')
-        templates = {
-            'welcome': {
-                'subject': 'Welcome to JobConnect Nigeria! 🇳🇬',
-                'body': f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-                    <h2 style="color:#d4a843;">Welcome to JobConnect Nigeria, {user_name}!</h2>
-                    <p>Thank you for joining Nigeria's most trusted job connection platform.</p>
-                    <p>Complete your profile verification to access all features.</p>
-                    <a href="https://jobconnect-sage.vercel.app" style="background:#d42027;color:white;padding:12px 24px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:15px;">Go to Dashboard</a>
-                </div>'''
-            },
-            'payment': {
-                'subject': 'Payment Confirmed - JobConnect Nigeria',
-                'body': f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-                    <h2 style="color:#28a745;">✅ Payment Confirmed!</h2>
-                    <p>Dear {user_name},</p>
-                    <p>Your commission payment of <strong>₦{data.get('amount', 0):,}</strong> has been received and is securely held in escrow.</p>
-                    <p><strong>Reference:</strong> {data.get('reference', 'N/A')}</p>
-                </div>'''
-            },
-            'verification': {
-                'subject': 'Verification Update - JobConnect Nigeria',
-                'body': f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-                    <h2 style="color:#d4a843;">Verification Update</h2>
-                    <p>Dear {user_name},</p>
-                    <p>Your verification documents have been received and are under review (24-48 hours).</p>
-                </div>'''
-            },
-            'dispute': {
-                'subject': 'Dispute Update - JobConnect Nigeria',
-                'body': f'''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-                    <h2 style="color:#d42027;">Dispute Update</h2>
-                    <p>Dear {user_name},</p>
-                    <p>Status: {data.get('status', 'Under Review')}</p>
-                </div>'''
-            }
-        }
-        template = templates.get(email_type, templates['welcome'])
-        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-        from_email = Email(FROM_EMAIL, FROM_NAME)
-        to_email = To(recipient)
-        content = Content("text/html", template['body'])
-        mail = Mail(from_email, to_email, template['subject'], content)
-        response = sg.client.mail.send.post(request_body=mail.get())
-        return jsonify({"success": True, "message": "Notification sent"}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# ============================================
-# ACCESS LOG
-# ============================================
-@app.route('/api/logs/access', methods=['POST'])
-def log_access():
-    try:
-        data = request.json
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO access_logs (user_id, user_email, user_type, page_accessed,
-                ip_address, user_agent, gps_latitude, gps_longitude, device_type, browser, os)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (data.get('user_id'), data.get('email'), data.get('user_type'),
-              data.get('page'), request.remote_addr, request.headers.get('User-Agent', ''),
-              data.get('latitude'), data.get('longitude'), data.get('device_type', ''),
-              data.get('browser', ''), data.get('os', '')))
-        conn.commit()
-        cur.close(); conn.close()
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# ============================================
-# ACTIVITY LOG
-# ============================================
-@app.route('/api/logs/activity', methods=['POST'])
-def log_activity():
-    try:
-        data = request.json
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO activity_logs (user_id, user_email, user_type, activity_type,
-                activity_description, module, severity, metadata, ip_address, gps_latitude, gps_longitude)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (data.get('user_id'), data.get('email'), data.get('user_type'),
-              data.get('activity_type'), data.get('description'), data.get('module'),
-              data.get('severity', 'info'), json.dumps(data.get('metadata', {})),
-              request.remote_addr, data.get('latitude'), data.get('longitude')))
-        conn.commit()
-        cur.close(); conn.close()
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# ============================================
-# NOTIFICATIONS
-# ============================================
-@app.route('/api/notifications/<user_id>', methods=['GET'])
-def get_notifications(user_id):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT id, title, message, type, is_read, link, created_at
-            FROM notifications WHERE user_id = %s ORDER BY created_at DESC LIMIT 50
-        """, (user_id,))
-        notifications = [{"id": str(r[0]), "title": r[1], "message": r[2],
-                          "type": r[3], "is_read": r[4], "link": r[5],
-                          "created_at": str(r[6])} for r in cur.fetchall()]
-        cur.close(); conn.close()
-        return jsonify({"success": True, "notifications": notifications})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# ============================================
-# ANNOUNCEMENTS
-# ============================================
-@app.route('/api/announcements', methods=['GET'])
-def get_announcements():
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT id, title, content, priority, target_audience, created_at
-            FROM announcements WHERE is_active = TRUE
-            AND (expires_at IS NULL OR expires_at > NOW()) ORDER BY created_at DESC
-        """)
-        announcements = [{"id": str(r[0]), "title": r[1], "content": r[2],
-                          "priority": r[3], "audience": r[4], "date": str(r[5])}
-                         for r in cur.fetchall()]
-        cur.close(); conn.close()
-        return jsonify({"success": True, "announcements": announcements})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# ============================================
-# AGENT CONFIRM DISPUTE
-# ============================================
-@app.route('/api/commission/<agreement_id>/agent-confirm', methods=['POST'])
-def agent_confirm_dispute(agreement_id):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            UPDATE commission_agreements SET dispute_agent_confirmed = TRUE
-            WHERE id = %s
-        """, (agreement_id,))
-        conn.commit()
-        cur.close(); conn.close()
-        return jsonify({"success": True, "message": "Agent confirmed"})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
- # ============================================
-# ADMIN: GET ALL VERIFICATION DOCUMENTS
-# ============================================
-@app.route('/api/admin/verifications', methods=['GET'])
-def get_all_verifications():
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        cur.execute("""
-            SELECT u.id, u.email, u.user_type, u.full_name, u.verification_status,
-                   u.passport_photo, u.nin, u.bvn, u.bank_name, u.account_number,
-                   u.date_of_birth, u.address, u.city, u.state,
-                   u.guarantor_name, u.guarantor_phone,
-                   u.next_of_kin_name, u.next_of_kin_phone,
-                   u.emergency_contact_name, u.emergency_contact_phone,
-                   u.social_media_1, u.social_media_2,
-                   u.created_at, u.updated_at
-            FROM users u
-            WHERE u.verification_status = 'pending'
-            ORDER BY u.created_at DESC
-        """)
-        
-        users = []
-        for row in cur.fetchall():
-            users.append({
-                "id": str(row[0]), "email": row[1], "user_type": row[2],
-                "full_name": row[3], "verification_status": row[4],
-                "passport_photo": row[5], "nin": row[6], "bvn": row[7],
-                "bank_name": row[8], "account_number": row[9],
-                "date_of_birth": str(row[10]) if row[10] else None,
-                "address": row[11], "city": row[12], "state": row[13],
-                "guarantor_name": row[14], "guarantor_phone": row[15],
-                "next_of_kin_name": row[16], "next_of_kin_phone": row[17],
-                "emergency_contact_name": row[18], "emergency_contact_phone": row[19],
-                "social_media_1": row[20], "social_media_2": row[21],
-                "created_at": str(row[22]), "updated_at": str(row[23])
-            })
-        
-        cur.close(); conn.close()
-        return jsonify({"success": True, "users": users, "count": len(users)})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-
-@app.route('/api/admin/verify/<user_id>', methods=['POST'])
-def verify_user(user_id):
-    """Approve or reject user verification"""
-    try:
-        data = request.json
-        action = data.get('action')  # 'approve' or 'reject'
-        
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        if action == 'approve':
-            cur.execute("""
-                UPDATE users SET is_verified = true, verification_status = 'verified',
-                verification_level = 1, updated_at = NOW()
-                WHERE id = %s
-            """, (user_id,))
-        else:
-            cur.execute("""
-                UPDATE users SET verification_status = 'rejected', updated_at = NOW()
-                WHERE id = %s
-            """, (user_id,))
+                  data.get('city'), data.get('state'), data['user_id']))
         
         conn.commit()
-        cur.close(); conn.close()
         
-        return jsonify({"success": True, "message": f"User {action}d successfully"}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-# ============================================
-# ANALYTICS SUMMARY
-# ============================================
-@app.route('/api/analytics/summary', methods=['GET'])
-def get_analytics_summary():
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        stats = {}
-        cur.execute("SELECT COUNT(*) FROM users"); stats['total_users'] = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM users WHERE user_type = 'agent'"); stats['total_agents'] = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM users WHERE user_type = 'job_seeker'"); stats['total_seekers'] = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM job_listings WHERE status = 'active'"); stats['active_jobs'] = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM job_listings WHERE status = 'filled'"); stats['filled_jobs'] = cur.fetchone()[0]
-        cur.execute("SELECT COALESCE(SUM(commission_amount), 0) FROM commission_agreements WHERE payment_status = 'paid'")
-        stats['total_commission'] = float(cur.fetchone()[0])
-        cur.execute("SELECT COUNT(*) FROM users WHERE verification_status = 'pending'")
-        stats['pending_verifications'] = cur.fetchone()[0]
-        cur.close(); conn.close()
-        return jsonify({"success": True, "stats": stats})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-# ============================================
-# GET AGENT PROFILE BY USER ID
-# ============================================
-@app.route('/api/agent/profile/<user_id>', methods=['GET'])
-def get_agent_profile(user_id):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        cur.execute("""
-            SELECT id, full_name, verification_status
-            FROM agent_profiles WHERE user_id = %s
-        """, (user_id,))
-        
-        profile = cur.fetchone()
-        cur.close(); conn.close()
-        
-        if profile:
-            return jsonify({
-                "success": True,
-                "profile_id": str(profile[0]),
-                "full_name": profile[1],
-                "verification_status": profile[2]
-            }), 200
-        else:
-            return jsonify({"success": False, "error": "No agent profile found"}), 404
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-    # ============================================
-# KYC PROVIDER CONFIGURATION (Dojah/Identitypass)
-# ============================================
-KYC_API_KEY = os.environ.get('KYC_API_KEY', '')  # Set in Render env vars
-KYC_BASE_URL = 'https://api.identitypass.com/api/v1'
-KYC_HEADERS = {
-    'Authorization': f'Bearer {KYC_API_KEY}',
-    'Content-Type': 'application/json',
-    'x-api-key': KYC_API_KEY
-}
-
-# ============================================
-# COST TRACKING FOR KYC CHECKS
-# ============================================
-KYC_COSTS = {
-    'bvn': 150,      # ₦150 per BVN check
-    'vnin': 100,     # ₦100 per vNIN check
-    'address': 2000  # ₦2,000 per address verification
-}
-
-# ============================================
-# VERIFY BVN
-# ============================================
-@app.route('/api/kyc/verify-bvn', methods=['POST'])
-def verify_bvn():
-    try:
-        data = request.json
-        user_id = data.get('user_id')
-        bvn = data.get('bvn')
-        first_name = data.get('first_name', '')
-        last_name = data.get('last_name', '')
-        
-        if not bvn or len(bvn) != 11:
-            return jsonify({"success": False, "error": "Invalid BVN. Must be 11 digits."}), 400
-        
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Call KYC provider API
-        response = requests.post(
-            f'{KYC_BASE_URL}/bvn/verify',
-            json={"bvn": bvn},
-            headers=KYC_HEADERS,
-            timeout=30
+        return success_response(
+            data={"id": safe_str(location_id)},
+            message="Location tracked"
         )
-        
-        kyc_data = response.json()
-        
-        if response.status_code == 200 and kyc_data.get('status') == 'success':
-            kyc_info = kyc_data.get('data', {})
-            
-            # Name matching logic
-            provider_first = kyc_info.get('first_name', '').lower()
-            provider_last = kyc_info.get('last_name', '').lower()
-            
-            name_match = (
-                provider_first == first_name.lower() and 
-                provider_last == last_name.lower()
-            )
-            
-            if name_match:
-                # Update user as BVN verified
-                cur.execute("""
-                    UPDATE users SET 
-                        bvn_verified = TRUE,
-                        bvn = %s,
-                        kyc_status = CASE WHEN nin_verified THEN 'approved' ELSE 'in_progress' END,
-                        kyc_reference = %s,
-                        updated_at = NOW()
-                    WHERE id = %s
-                """, (bvn, kyc_info.get('reference', str(uuid.uuid4())), user_id))
-                
-                conn.commit()
-                cur.close(); conn.close()
-                
-                return jsonify({
-                    "success": True,
-                    "message": "BVN verified successfully! Name matches records.",
-                    "name_match": True,
-                    "cost": KYC_COSTS['bvn']
-                }), 200
-            else:
-                cur.close(); conn.close()
-                return jsonify({
-                    "success": False,
-                    "error": "Name mismatch. BVN does not match provided name.",
-                    "name_match": False,
-                    "cost": KYC_COSTS['bvn']
-                }), 400
-        else:
-            cur.close(); conn.close()
-            return jsonify({
-                "success": False,
-                "error": "BVN verification failed. Please check the number and try again.",
-                "cost": 0
-            }), 400
-            
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
 
 # ============================================
-# VERIFY VIRTUAL NIN (vNIN)
+# ADMIN - ACCESS LOGS
 # ============================================
-@app.route('/api/kyc/verify-vnin', methods=['POST'])
-def verify_vnin():
+@app.route('/api/admin/access-logs', methods=['GET'])
+@require_admin
+def admin_get_access_logs():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
-        data = request.json
-        user_id = data.get('user_id')
-        vnin = data.get('vnin')
-        
-        if not vnin:
-            return jsonify({"success": False, "error": "Virtual NIN is required"}), 400
-        
-        conn = get_db_connection()
         cur = conn.cursor()
+        cur.execute("SELECT * FROM access_logs ORDER BY created_at DESC LIMIT 100")
         
-        # Call KYC provider API for vNIN
-        response = requests.post(
-            f'{KYC_BASE_URL}/nin/verify',
-            json={"vnin": vnin},
-            headers=KYC_HEADERS,
-            timeout=30
-        )
+        columns = [desc[0] for desc in cur.description]
+        logs = []
+        for row in cur.fetchall():
+            log = {col: safe_str(row[i]) for i, col in enumerate(columns)}
+            logs.append(log)
         
-        kyc_data = response.json()
-        
-        if response.status_code == 200 and kyc_data.get('status') == 'success':
-            # Update user as NIN verified
-            cur.execute("""
-                UPDATE users SET 
-                    nin_verified = TRUE,
-                    vnin = %s,
-                    kyc_status = CASE WHEN bvn_verified THEN 'approved' ELSE 'in_progress' END,
-                    kyc_reference = %s,
-                    updated_at = NOW()
-                WHERE id = %s
-            """, (vnin, kyc_data.get('reference', str(uuid.uuid4())), user_id))
-            
-            conn.commit()
-            cur.close(); conn.close()
-            
-            return jsonify({
-                "success": True,
-                "message": "NIN verified successfully!",
-                "cost": KYC_COSTS['vnin']
-            }), 200
-        else:
-            cur.close(); conn.close()
-            return jsonify({
-                "success": False,
-                "error": "vNIN verification failed. Please generate a new vNIN and try again.",
-                "cost": 0
-            }), 400
-            
+        return success_response(data={"logs": logs})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
 
 # ============================================
-# UPLOAD UTILITY BILL FOR ADDRESS VERIFICATION
+# ADMIN - ACTIVITY LOGS
 # ============================================
-@app.route('/api/kyc/upload-utility-bill', methods=['POST'])
-def upload_utility_bill():
+@app.route('/api/admin/activity-logs', methods=['GET'])
+@require_admin
+def admin_get_activity_logs():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
-        data = request.json
-        user_id = data.get('user_id')
-        bill_url = data.get('bill_url')  # URL from Cloudinary upload
-        
-        if not bill_url:
-            return jsonify({"success": False, "error": "Utility bill upload required"}), 400
-        
-        conn = get_db_connection()
         cur = conn.cursor()
+        cur.execute("SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 100")
         
-        # Save utility bill URL
-        cur.execute("""
-            UPDATE users SET 
-                utility_bill_url = %s,
-                address_verified = TRUE,
-                kyc_status = CASE 
-                    WHEN bvn_verified AND nin_verified THEN 'approved' 
-                    ELSE 'in_progress' 
-                END,
-                updated_at = NOW()
-            WHERE id = %s
-        """, (bill_url, user_id))
+        columns = [desc[0] for desc in cur.description]
+        logs = []
+        for row in cur.fetchall():
+            log = {col: safe_str(row[i]) for i, col in enumerate(columns)}
+            logs.append(log)
         
-        conn.commit()
-        cur.close(); conn.close()
-        
-        return jsonify({
-            "success": True,
-            "message": "Utility bill uploaded. Address verification pending admin review.",
-            "cost": KYC_COSTS['address']
-        }), 200
-            
+        return success_response(data={"logs": logs})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
 
 # ============================================
-# GET KYC STATUS
+# ADMIN - AUDIT LOGS
 # ============================================
-@app.route('/api/kyc/status/<user_id>', methods=['GET'])
-def get_kyc_status(user_id):
+@app.route('/api/admin/audit-logs', methods=['GET'])
+@require_admin
+def admin_get_audit_logs():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
-        conn = get_db_connection()
         cur = conn.cursor()
+        cur.execute("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100")
         
-        cur.execute("""
-            SELECT 
-                bvn_verified, nin_verified, address_verified,
-                kyc_status, kyc_reference, vnin, utility_bill_url,
-                bvn, nin
-            FROM users WHERE id = %s
-        """, (user_id,))
+        columns = [desc[0] for desc in cur.description]
+        logs = []
+        for row in cur.fetchall():
+            log = {col: safe_str(row[i]) for i, col in enumerate(columns)}
+            logs.append(log)
         
-        user = cur.fetchone()
-        cur.close(); conn.close()
-        
-        if not user:
-            return jsonify({"success": False, "error": "User not found"}), 404
-        
-        return jsonify({
-            "success": True,
-            "kyc": {
-                "bvn_verified": user[0],
-                "nin_verified": user[1],
-                "address_verified": user[2],
-                "kyc_status": user[3],
-                "kyc_reference": user[4],
-                "vnin": user[5],
-                "utility_bill_url": user[6],
-                "bvn": user[7],
-                "nin": user[8]
-            }
-        }), 200
-        
+        return success_response(data={"logs": logs})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
 
 # ============================================
-# ENFORCE KYC CHECK ON JOB POSTING
+# ADMIN - COMMUNICATION
 # ============================================
-@app.route('/api/agent/post-job', methods=['POST'])
-def post_job_with_kyc():
-    try:
-        data = request.json
-        agent_id = data.get('agent_id')
-        
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Check KYC status before allowing job post
-        cur.execute("SELECT kyc_status, bvn_verified, nin_verified FROM users WHERE id = %s", (agent_id,))
-        user = cur.fetchone()
-        
-        if not user or user[0] != 'approved':
-            cur.close(); conn.close()
-            return jsonify({
-                "success": False,
-                "error": "Complete KYC verification before posting jobs.",
-                "kyc_required": True
-            }), 403
-        
-        # Proceed with job posting (existing logic)
-        cur.execute("""
-            INSERT INTO job_listings (
-                agent_id, job_title, qualification_requirements,
-                experience_requirements, required_skills,
-                salary_range_min, salary_range_max, salary_type,
-                organization_name, organization_contact_person,
-                organization_email, organization_phone,
-                commission_percentage, is_negotiable,
-                has_interview, has_exam, status
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'active')
-            RETURNING id
-        """, (
-            agent_id, data['job_title'], data['qualification_requirements'],
-            data['experience_requirements'], data.get('required_skills', ''),
-            data['salary_range_min'], data['salary_range_max'],
-            data.get('salary_type', 'monthly'), data['organization_name'],
-            data.get('organization_contact_person', ''), data.get('organization_email', ''),
-            data.get('organization_phone', ''),
-            data.get('commission_percentage', 15),
-            data.get('is_negotiable', True),
-            data.get('has_interview', False),
-            data.get('has_exam', False)
-        ))
-        
-        job_id = cur.fetchone()[0]
-        conn.commit()
-        cur.close(); conn.close()
-        
-        return jsonify({"success": True, "message": "Job posted", "job_id": str(job_id)}), 201
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-        # ============================================
-# ADMIN COMMUNICATION SYSTEM
-# ============================================
-
-# Send message to individual user
 @app.route('/api/admin/message/send', methods=['POST'])
+@require_admin
 def admin_send_message():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
         data = request.json
-        conn = get_db_connection()
         cur = conn.cursor()
         
         cur.execute("""
             INSERT INTO admin_messages (sender_id, receiver_id, subject, message)
-            VALUES (%s, %s, %s, %s) RETURNING id
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
         """, (data.get('sender_id'), data.get('receiver_id'),
               data.get('subject', ''), data.get('message', '')))
         
         msg_id = cur.fetchone()[0]
         conn.commit()
-        cur.close(); conn.close()
         
-        return jsonify({"success": True, "message_id": str(msg_id)}), 201
+        return success_response(
+            data={"message_id": safe_str(msg_id)},
+            status_code=201
+        )
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
 
-# Broadcast message to group
 @app.route('/api/admin/broadcast', methods=['POST'])
+@require_admin
 def admin_broadcast():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    
     try:
         data = request.json
         group_type = data.get('group_type', 'all')
@@ -1225,220 +1566,78 @@ def admin_broadcast():
         subject = data.get('subject', '')
         message = data.get('message', '')
         
-        conn = get_db_connection()
         cur = conn.cursor()
         
-        # Save broadcast
         cur.execute("""
             INSERT INTO broadcast_messages (sender_id, group_type, subject, message, sent_via)
-            VALUES (%s, %s, %s, %s, %s) RETURNING id
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
         """, (sender_id, group_type, subject, message, data.get('sent_via', 'platform')))
         
         broadcast_id = cur.fetchone()[0]
         
-        # Get recipients based on group type
-        if group_type == 'all':
-            cur.execute("SELECT id, email FROM users WHERE id != %s", (sender_id,))
-        elif group_type == 'agents':
-            cur.execute("SELECT id, email FROM users WHERE user_type = 'agent'")
-        elif group_type == 'seekers':
-            cur.execute("SELECT id, email FROM users WHERE user_type = 'job_seeker'")
-        elif group_type == 'staff':
-            cur.execute("SELECT id, email FROM users WHERE user_type = 'staff'")
-        elif group_type == 'verified':
-            cur.execute("SELECT id, email FROM users WHERE is_verified = true")
-        elif group_type == 'unverified':
-            cur.execute("SELECT id, email FROM users WHERE is_verified = false")
-        else:
-            cur.execute("SELECT id, email FROM users WHERE id != %s", (sender_id,))
+        # Get recipients based on group
+        group_queries = {
+            'all': "SELECT id, email FROM users WHERE id != %s",
+            'agents': "SELECT id, email FROM users WHERE user_type = 'agent'",
+            'seekers': "SELECT id, email FROM users WHERE user_type = 'job_seeker'",
+            'verified': "SELECT id, email FROM users WHERE is_verified = true",
+            'unverified': "SELECT id, email FROM users WHERE is_verified = false"
+        }
+        
+        query = group_queries.get(group_type, group_queries['all'])
+        params = (sender_id,) if '%s' in query else ()
+        cur.execute(query, params)
         
         recipients = cur.fetchall()
         
-        # Send individual messages to each recipient
         for recipient in recipients:
             cur.execute("""
                 INSERT INTO admin_messages (sender_id, receiver_id, subject, message)
                 VALUES (%s, %s, %s, %s)
-            """, (sender_id, str(recipient[0]), subject, message))
+            """, (sender_id, safe_str(recipient[0]), subject, message))
         
         conn.commit()
-        cur.close(); conn.close()
         
-        return jsonify({
-            "success": True,
-            "broadcast_id": str(broadcast_id),
-            "recipients": len(recipients)
-        }), 201
+        return success_response(
+            data={
+                "broadcast_id": safe_str(broadcast_id),
+                "recipients": len(recipients)
+            },
+            status_code=201
+        )
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
 
-# Get messages for a user
-@app.route('/api/admin/messages/<user_id>', methods=['GET'])
-def get_user_messages(user_id):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        cur.execute("""
-            SELECT m.id, u.email as sender_email, m.subject, m.message, m.is_read, m.created_at
-            FROM admin_messages m
-            JOIN users u ON m.sender_id = u.id
-            WHERE m.receiver_id = %s
-            ORDER BY m.created_at DESC LIMIT 50
-        """, (user_id,))
-        
-        messages = [{
-            "id": str(r[0]), "sender": r[1], "subject": r[2],
-            "message": r[3], "is_read": r[4], "created_at": str(r[5])
-        } for r in cur.fetchall()]
-        
-        cur.close(); conn.close()
-        return jsonify({"success": True, "messages": messages})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# Get all users for messaging
-@app.route('/api/admin/users-list', methods=['GET'])
-def get_users_list():
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        cur.execute("""
-            SELECT id, email, user_type, phone, is_verified
-            FROM users ORDER BY created_at DESC
-        """)
-        
-        users = [{
-            "id": str(r[0]), "email": r[1], "user_type": r[2],
-            "phone": r[3], "is_verified": r[4]
-        } for r in cur.fetchall()]
-        
-        cur.close(); conn.close()
-        return jsonify({"success": True, "users": users})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# Send email notification
-@app.route('/api/admin/send-email', methods=['POST'])
-def admin_send_email():
-    try:
-        data = request.json
-        
-        # Log the communication
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO comm_logs (user_id, recipient, type, subject, message, status)
-            VALUES (%s, %s, 'email', %s, %s, 'sent')
-        """, (data.get('user_id'), data.get('recipient'), data.get('subject'), data.get('message')))
-        conn.commit()
-        cur.close(); conn.close()
-        
-        # Send via SendGrid
-        try:
-            sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-            mail = Mail(
-                Email(FROM_EMAIL, FROM_NAME),
-                To(data.get('recipient')),
-                data.get('subject', 'JobConnect Notification'),
-                Content("text/html", data.get('message', ''))
-            )
-            sg.client.mail.send.post(request_body=mail.get())
-        except:
-            pass
-        
-        return jsonify({"success": True, "message": "Email sent"}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-# Send SMS/WhatsApp notification
-@app.route('/api/admin/send-sms', methods=['POST'])
-def admin_send_sms():
-    try:
-        data = request.json
-        phone = data.get('phone')
-        message = data.get('message')
-        msg_type = data.get('type', 'sms')  # 'sms' or 'whatsapp'
-        
-        # Log the communication
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO comm_logs (user_id, recipient, type, subject, message, status)
-            VALUES (%s, %s, %s, %s, %s, 'sent')
-        """, (data.get('user_id'), phone, msg_type, data.get('subject', ''), message))
-        conn.commit()
-        cur.close(); conn.close()
-        
-        # Format WhatsApp URL
-        if msg_type == 'whatsapp':
-            wa_url = f"https://wa.me/{phone.replace('+','').replace(' ','')}?text={message[:500]}"
-            return jsonify({"success": True, "whatsapp_url": wa_url, "message": "Open WhatsApp link"}), 200
-        
-        # SMS - would need Twilio or similar service
-        return jsonify({"success": True, "message": "SMS logged. SMS gateway integration needed."}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-    # ============================================
-# GET USER FULL PROFILE
 # ============================================
-@app.route('/api/user/profile/<user_id>', methods=['GET'])
-def get_user_profile(user_id):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        # Get user data
-        cur.execute("""
-            SELECT id, email, phone, user_type, is_verified, full_name,
-                   date_of_birth, address, city, state, nin, bvn,
-                   bank_name, account_number, account_name,
-                   guarantor_name, guarantor_phone, guarantor_address,
-                   next_of_kin_name, next_of_kin_phone, next_of_kin_address,
-                   emergency_contact_name, emergency_contact_phone,
-                   social_media_1, social_media_2, verification_status,
-                   passport_photo, government_id_photo,
-                   gps_latitude, gps_longitude, last_location_update,
-                   created_at, updated_at
-            FROM users WHERE id = %s
-        """, (user_id,))
-        
-        user = cur.fetchone()
-        
-        if not user:
-            cur.close(); conn.close()
-            return jsonify({"success": False, "error": "User not found"}), 404
-        
-        profile = {
-            "id": str(user[0]), "email": user[1], "phone": user[2],
-            "user_type": user[3], "is_verified": user[4], "full_name": user[5],
-            "date_of_birth": str(user[6]) if user[6] else None,
-            "address": user[7], "city": user[8], "state": user[9],
-            "nin": user[10], "bvn": user[11],
-            "bank_name": user[12], "account_number": user[13], "account_name": user[14],
-            "guarantor_name": user[15], "guarantor_phone": user[16], "guarantor_address": user[17],
-            "next_of_kin_name": user[18], "next_of_kin_phone": user[19], "next_of_kin_address": user[20],
-            "emergency_contact_name": user[21], "emergency_contact_phone": user[22],
-            "social_media_1": user[23], "social_media_2": user[24],
-            "verification_status": user[25],
-            "passport_photo": user[26], "government_id_photo": user[27],
-            "gps_latitude": str(user[28]) if user[28] else None,
-            "gps_longitude": str(user[29]) if user[29] else None,
-            "last_location_update": str(user[30]) if user[30] else None,
-            "created_at": str(user[31]), "updated_at": str(user[32])
-        }
-        
-        cur.close(); conn.close()
-        return jsonify({"success": True, "profile": profile}), 200
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+# ERROR HANDLERS
+# ============================================
+@app.errorhandler(404)
+def not_found_error(error):
+    return error_response("Endpoint not found", 404)
+
+@app.errorhandler(500)
+def internal_error(error):
+    return error_response("Internal server error", 500)
+
+@app.errorhandler(429)
+def ratelimit_error(error):
+    return error_response("Rate limit exceeded. Please try again later.", 429)
+
 # ============================================
 # RUN APPLICATION
 # ============================================
 if __name__ == '__main__':
     print("🚀 JobConnect Nigeria API Starting...")
-    print("📍 Local: http://localhost:5000")
-    print("📊 Database: Connected")
+    print(f"📍 Local: http://localhost:5000")
+    print(f"📊 Database: {'Connected' if get_db_connection() else 'Not Connected'}")
+    print("🔐 Admin routes protected with @require_admin")
+    print("⏱️  Rate limiting enabled")
+    print("🔒 Password hashing: bcrypt/SHA256")
+    print("🛡️  SQL injection protection: Parameterized queries")
     app.run(debug=True, host='0.0.0.0', port=5000)
