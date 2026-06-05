@@ -1,30 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './CookieConsent.css';
 
 function CookieConsent() {
-  const [accepted, setAccepted] = useState(
-    localStorage.getItem('cookieConsent') === 'accepted'
-  );
+  const [accepted, setAccepted] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [fadingOut, setFadingOut] = useState(false);
+
+  useEffect(() => {
+    // Check if consent was already given
+    const consent = localStorage.getItem('cookieConsent');
+    if (!consent) {
+      // Small delay before showing for better UX
+      const timer = setTimeout(() => setVisible(true), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const handleAccept = () => {
     localStorage.setItem('cookieConsent', 'accepted');
-    setAccepted(true);
+    localStorage.setItem('cookieConsentDate', new Date().toISOString());
+    setFadingOut(true);
+    setTimeout(() => {
+      setAccepted(true);
+      setVisible(false);
+    }, 300);
   };
 
   const handleDecline = () => {
     localStorage.setItem('cookieConsent', 'declined');
-    setAccepted(true);
+    localStorage.setItem('cookieConsentDate', new Date().toISOString());
+    setFadingOut(true);
+    setTimeout(() => {
+      setAccepted(true);
+      setVisible(false);
+    }, 300);
   };
 
-  if (accepted) return null;
+  if (!visible) return null;
 
   return (
-    <div className="cookie-consent">
-      <div className="cookie-content">
-        <p>🍪 We use cookies to improve your experience. By using JobConnect, you agree to our <a href="/privacy">Privacy Policy</a>.</p>
+    <div className={`cookie-consent ${fadingOut ? 'fade-out' : 'fade-in'}`}>
+      <div className="cookie-container">
+        <div className="cookie-icon">🍪</div>
+        <div className="cookie-content">
+          <h4>Cookie Consent</h4>
+          <p>
+            We use cookies to enhance your browsing experience, serve personalized content, 
+            and analyze our traffic. By clicking "Accept All", you consent to our use of cookies.
+          </p>
+          <p className="cookie-links">
+            <a href="/privacy">Privacy Policy</a>
+            <span className="separator">|</span>
+            <a href="/terms">Terms of Service</a>
+            <span className="separator">|</span>
+            <a href="/cookies">Cookie Settings</a>
+          </p>
+        </div>
         <div className="cookie-buttons">
-          <button onClick={handleAccept} className="btn btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}>Accept</button>
-          <button onClick={handleDecline} className="btn btn-sm" style={{background:'#666',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}>Decline</button>
+          <button 
+            onClick={handleAccept} 
+            className="cookie-btn cookie-btn-accept"
+            aria-label="Accept all cookies"
+          >
+            ✅ Accept All
+          </button>
+          <button 
+            onClick={handleDecline} 
+            className="cookie-btn cookie-btn-decline"
+            aria-label="Decline optional cookies"
+          >
+            ❌ Decline
+          </button>
         </div>
       </div>
     </div>

@@ -1,21 +1,110 @@
 {
   "name": "JobConnect Nigeria",
   "short_name": "JobConnect",
+  "description": "Verified Jobs Through Trusted Agents - Nigeria's most trusted job connection platform",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
   "background_color": "#0a1628",
   "theme_color": "#d4a843",
-  "description": "Verified Jobs Through Trusted Agents",
+  "lang": "en-NG",
+  "dir": "ltr",
+  "categories": ["business", "jobs", "employment", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
+      "src": "/job_connect_logo.png",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/job_connect_logo.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/job_connect_logo.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/job_connect_logo.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/job_connect_logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/job_connect_logo.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/job_connect_logo.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/job_connect_logo.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
-  ]
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-home.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Homepage of JobConnect Nigeria"
+    },
+    {
+      "src": "/screenshot-jobs.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Job listings on JobConnect"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Find Jobs",
+      "short_name": "Jobs",
+      "description": "Browse verified job listings",
+      "url": "/jobs",
+      "icons": [
+        {
+          "src": "/job_connect_logo.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Sign In",
+      "short_name": "Login",
+      "description": "Sign in to your account",
+      "url": "/signin",
+      "icons": [
+        {
+          "src": "/job_connect_logo.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "related_applications": [],
+  "iarc_rating_id": ""
 }

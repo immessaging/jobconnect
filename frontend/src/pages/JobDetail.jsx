@@ -10,12 +10,14 @@ function JobDetail() {
   const navigate = useNavigate();
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [user, setUser] = useState(null);
 
   // Contract & Payment states
   const [showContract, setShowContract] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  // Commission comes from job data - agent sets it when posting (5-35%)
   const [commissionPercent, setCommissionPercent] = useState(15);
   const [isNegotiable, setIsNegotiable] = useState(true);
   const [agreementData, setAgreementData] = useState(null);
@@ -23,26 +25,54 @@ function JobDetail() {
   const [orgDetails, setOrgDetails] = useState(null);
 
   useEffect(() => {
+    // Get user from localStorage
     const userData = localStorage.getItem('user');
     if (userData) {
-      setUser(JSON.parse(userData));
+      try {
+        setUser(JSON.parse(userData));
+      } catch (e) {
+        console.log('Error parsing user data:', e);
+      }
     }
 
-    getJobDetail(id)
-      .then(res => {
-        const jobData = res.data.job;
-        setJob(jobData);
-        // Get commission from job data or default
-        if (jobData) {
-          setCommissionPercent(jobData.commission_percentage || 15);
-          setIsNegotiable(jobData.is_negotiable !== false);
+    // Fetch job details
+    const fetchJobDetail = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const res = await getJobDetail(id);
+        const jobData = res.data?.job || res.data;
+        
+        if (!jobData) {
+          setError('Job not found');
+          setLoading(false);
+          return;
         }
+        
+        setJob(jobData);
+        
+        // ✅ Commission comes from job data - agent sets this when posting (5-35%)
+        // Not hardcoded to 15% - uses whatever the agent set
+        setCommissionPercent(
+          jobData.commission_percentage || 
+          jobData.commissionPercent || 
+          jobData.commission || 
+          15 // Only fallback to 15% if nothing is set
+        );
+        
+        // Negotiable flag comes from job data
+        setIsNegotiable(jobData.is_negotiable !== false);
+        
         setLoading(false);
-      })
-      .catch(err => {
-        console.log(err);
+      } catch (err) {
+        console.log('Error fetching job:', err);
+        setError('Failed to load job details. Please try again.');
         setLoading(false);
-      });
+      }
+    };
+
+    fetchJobDetail();
   }, [id]);
 
   const handleApply = () => {
@@ -63,26 +93,33 @@ function JobDetail() {
   const handlePaymentComplete = (paymentData) => {
     setShowPayment(false);
     setOrgRevealed(true);
-    // Reveal organization details
-    setOrgDetails({
-      name: job?.organization_name || 'Tech Corp Nigeria',
-      contactPerson: job?.organization_contact_person || 'HR Manager',
-      email: job?.organization_email || 'hr@techcorp.ng',
-      phone: job?.organization_phone || '080-XXXX-XXXX'
-    });
     
-    // Save agreement to localStorage for tracking
-    const agreements = JSON.parse(localStorage.getItem('agreements') || '[]');
-    agreements.push({
-      jobId: id,
-      jobTitle: job?.title,
-      ...data,
-      orgDetails: orgDetails,
-      paymentDate: new Date().toISOString(),
-      status: 'paid',
-      agentId: '00000000-0000-0000-0000-000000000010'
-    });
-    localStorage.setItem('agreements', JSON.stringify(agreements));
+    // Reveal organization details
+    const details = {
+      name: job?.organization || job?.organization_name || 'Organization',
+      contactPerson: job?.organization_contact_person || job?.contact_person || 'HR Manager',
+      email: job?.organization_email || job?.contact_email || 'contact@company.ng',
+      phone: job?.organization_phone || job?.contact_phone || '080-XXXX-XXXX'
+    };
+    
+    setOrgDetails(details);
+    
+    // Save agreement to localStorage
+    try {
+      const agreements = JSON.parse(localStorage.getItem('agreements') || '[]');
+      agreements.push({
+        jobId: id,
+        jobTitle: job?.title || 'Job',
+        ...paymentData,
+        orgDetails: details,
+        paymentDate: new Date().toISOString(),
+        status: 'paid',
+        agentId: job?.agent_id || '00000000-0000-0000-0000-000000000010'
+      });
+      localStorage.setItem('agreements', JSON.stringify(agreements));
+    } catch (e) {
+      console.log('Error saving agreement:', e);
+    }
   };
 
   const formatSalary = (min, max, type) => {
@@ -91,22 +128,46 @@ function JobDetail() {
       currency: 'NGN',
       minimumFractionDigits: 0,
     });
-    return `${formatter.format(min)} - ${formatter.format(max)} / ${type}`;
+    return `${formatter.format(min || 0)} - ${formatter.format(max || 0)} / ${type || 'monthly'}`;
   };
 
-  if (loading) return (
-    <div className="loading-container">
-      <div className="spinner"></div>
-      <p>Loading job details...</p>
-    </div>
-  );
+  // Calculate commission breakdown (uses agent-set percentage, not hardcoded)
+  const salaryMax = Number(job?.salary_max) || 0;
+  const totalCommission = (salaryMax * commissionPercent) / 100;
+  const platformFee = totalCommission * 0.17;
+  const agentPayout = totalCommission * 0.83;
 
-  if (!job) return (
-    <div className="error-container">
-      <p>Job not found</p>
-      <Link to="/jobs" className="btn btn-gold">Back to Jobs</Link>
-    </div>
-  );
+  // Loading state
+  if (loading) {
+    return (
+      <div className="loading-container">
+        <div className="spinner"></div>
+        <p>Loading job details...</p>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="error-container">
+        <div style={{ fontSize: '3rem', marginBottom: '15px' }}>⚠️</div>
+        <p>{error}</p>
+        <Link to="/jobs" className="btn btn-gold">Back to Jobs</Link>
+      </div>
+    );
+  }
+
+  // Job not found
+  if (!job) {
+    return (
+      <div className="error-container">
+        <div style={{ fontSize: '3rem', marginBottom: '15px' }}>🔍</div>
+        <p>Job not found</p>
+        <Link to="/jobs" className="btn btn-gold">Back to Jobs</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="job-detail-page">
@@ -127,23 +188,27 @@ function JobDetail() {
       )}
 
       {/* Contract Agreement Modal */}
-      <ContractAgreement
-        job={job}
-        isOpen={showContract}
-        onClose={() => setShowContract(false)}
-        onAgree={handleAgreementSigned}
-        commissionPercentage={commissionPercent}
-        isNegotiable={isNegotiable}
-        monthlySalary={job.salary_max || 300000}
-      />
+      {showContract && (
+        <ContractAgreement
+          job={job}
+          isOpen={showContract}
+          onClose={() => setShowContract(false)}
+          onAgree={handleAgreementSigned}
+          commissionPercentage={commissionPercent}
+          isNegotiable={isNegotiable}
+          monthlySalary={job.salary_max || 300000}
+        />
+      )}
 
       {/* Payment Modal */}
-      <PaymentModal
-        isOpen={showPayment}
-        onClose={() => setShowPayment(false)}
-        amount={agreementData?.commissionAmount || 0}
-        onPaymentComplete={handlePaymentComplete}
-      />
+      {showPayment && (
+        <PaymentModal
+          isOpen={showPayment}
+          onClose={() => setShowPayment(false)}
+          amount={agreementData?.commissionAmount || totalCommission || 0}
+          onPaymentComplete={handlePaymentComplete}
+        />
+      )}
 
       <div className="job-detail-container">
         <Link to="/jobs" className="back-link">← Back to Jobs</Link>
@@ -153,7 +218,7 @@ function JobDetail() {
             <h1>{job.title}</h1>
             <div className="job-badges">
               {job.verified_badge && <span className="badge badge-verified">✓ Verified Job</span>}
-              <span className="badge badge-gold">{job.status}</span>
+              <span className="badge badge-gold">{job.status || 'active'}</span>
             </div>
           </div>
           <div className="job-salary-large">
@@ -167,11 +232,11 @@ function JobDetail() {
               <h3>📋 Job Description</h3>
               <div className="detail-item">
                 <span className="detail-label">Qualification:</span>
-                <span>{job.qualification}</span>
+                <span>{job.qualification || 'Not specified'}</span>
               </div>
               <div className="detail-item">
                 <span className="detail-label">Experience:</span>
-                <span>{job.experience}</span>
+                <span>{job.experience || 'Not specified'}</span>
               </div>
               {job.skills && (
                 <div className="detail-item">
@@ -181,11 +246,14 @@ function JobDetail() {
               )}
               <div className="detail-item">
                 <span className="detail-label">Salary Type:</span>
-                <span className="badge badge-gold">{job.salary_type}</span>
+                <span className="badge badge-gold">{job.salary_type || 'monthly'}</span>
               </div>
+              {/* Commission display - shows agent-set percentage */}
               <div className="detail-item">
                 <span className="detail-label">Commission:</span>
-                <span className="badge badge-gold">{commissionPercent}% {isNegotiable ? '(Negotiable)' : '(Fixed)'}</span>
+                <span className="badge badge-gold">
+                  {commissionPercent}% {isNegotiable ? '(Negotiable)' : '(Fixed)'}
+                </span>
               </div>
             </div>
 
@@ -268,7 +336,7 @@ function JobDetail() {
                 )}
               </p>
               <button onClick={handleApply} className="btn btn-red apply-btn">
-                {user ? '🚀 I\'m Available for This Job' : '🔒 Sign In to Apply'}
+                {user ? "🚀 I'm Available for This Job" : '🔒 Sign In to Apply'}
               </button>
               {!user && (
                 <p className="signup-prompt">
@@ -288,27 +356,32 @@ function JobDetail() {
               </ul>
             </div>
 
+            {/* Fee Breakdown - uses agent-set commission percentage */}
             <div className="sidebar-card fee-card">
-  <h3>💰 Fee Breakdown</h3>
-  <p style={{fontSize:'13px',color:'#666',marginBottom:'10px'}}>
-    Commission is {commissionPercent}% of first month's salary (₦{Number(job?.salary_max).toLocaleString()})
-  </p>
-  <div className="fee-row">
-    <span>Total Commission ({commissionPercent}%):</span>
-    <span>₦{((Number(job?.salary_max) * commissionPercent) / 100).toLocaleString()}</span>
-  </div>
-  <div className="fee-row">
-    <span>Platform Fee (17% of commission):</span>
-    <span>₦{((Number(job?.salary_max) * commissionPercent * 0.17) / 100).toLocaleString()}</span>
-  </div>
-  <div className="fee-row">
-    <span>Agent Payout (83% of commission):</span>
-    <span>₦{((Number(job?.salary_max) * commissionPercent * 0.83) / 100).toLocaleString()}</span>
-  </div>
-  <p className="fee-note" style={{marginTop:'10px'}}>
-    ⚠️ You ONLY pay the commission. Agent's 83% and platform's 17% are split from the commission you pay.
-  </p>
-</div>
+              <h3>💰 Fee Breakdown</h3>
+              <p style={{fontSize:'13px',color:'#666',marginBottom:'10px'}}>
+                Commission is <strong>{commissionPercent}%</strong> of first month's salary (₦{salaryMax.toLocaleString()})
+                {isNegotiable && <span style={{color:'#d4a843', display:'block', marginTop:'5px'}}>🔄 This commission is negotiable - discuss with the agent</span>}
+              </p>
+              <div className="fee-row">
+                <span>Total Commission ({commissionPercent}%):</span>
+                <span>₦{totalCommission.toLocaleString()}</span>
+              </div>
+              <div className="fee-row">
+                <span>Platform Fee (17% of commission):</span>
+                <span>₦{platformFee.toLocaleString()}</span>
+              </div>
+              <div className="fee-row">
+                <span>Agent Payout (83% of commission):</span>
+                <span>₦{agentPayout.toLocaleString()}</span>
+              </div>
+              <p className="fee-note" style={{marginTop:'10px'}}>
+                ⚠️ You ONLY pay the commission shown above. The agent's 83% and platform's 17% are split from the commission you pay - no hidden fees!
+              </p>
+              <p className="fee-note" style={{fontSize:'11px',color:'#888',marginTop:'8px'}}>
+                💡 Commission rate set by the agent: <strong>{commissionPercent}%</strong> (Range: 5% - 35%)
+              </p>
+            </div>
           </div>
         </div>
       </div>

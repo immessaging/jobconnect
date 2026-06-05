@@ -1,22 +1,117 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-NG">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover" />
+    
+    <!-- Primary Meta Tags -->
     <title>JobConnect Nigeria - Verified Jobs Through Trusted Agents</title>
-    <meta name="description" content="JobConnect Nigeria: Find verified jobs through trusted agents. Every job verified. Every agent vetted with NIN, BVN, and biometrics." />
+    <meta name="title" content="JobConnect Nigeria - Verified Jobs Through Trusted Agents" />
+    <meta name="description" content="JobConnect Nigeria: Find verified jobs through trusted agents. Every job verified. Every agent vetted with NIN, BVN, and biometrics. Secure escrow payments." />
+    <meta name="keywords" content="jobs in nigeria, verified jobs, job agent nigeria, jobconnect, job seeker, employment nigeria, verified job listings, lagos jobs, abuja jobs" />
+    <meta name="author" content="JobConnect Nigeria" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="English" />
+    <meta name="revisit-after" content="7 days" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://jobconnect-sage.vercel.app/" />
+    <meta property="og:title" content="JobConnect Nigeria - Verified Jobs Through Trusted Agents" />
+    <meta property="og:description" content="Find verified jobs through trusted agents. Every job verified. Every agent vetted with NIN, BVN, and biometrics." />
+    <meta property="og:image" content="https://jobconnect-sage.vercel.app/job_connect_logo.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:site_name" content="JobConnect Nigeria" />
+    <meta property="og:locale" content="en_NG" />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://jobconnect-sage.vercel.app/" />
+    <meta property="twitter:title" content="JobConnect Nigeria - Verified Jobs Through Trusted Agents" />
+    <meta property="twitter:description" content="Find verified jobs through trusted agents. Every job verified. Every agent vetted with NIN, BVN, and biometrics." />
+    <meta property="twitter:image" content="https://jobconnect-sage.vercel.app/job_connect_logo.png" />
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#0a1628" />
+    <meta name="msapplication-navbutton-color" content="#0a1628" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    
+    <!-- Favicon -->
     <link rel="icon" href="/job_connect_logo.png" type="image/png" />
     <link rel="apple-touch-icon" href="/job_connect_logo.png" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="shortcut icon" href="/job_connect_logo.png" type="image/png" />
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://jobconnect-sage.vercel.app/" />
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" 
+          integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" 
+          crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Preconnect to API -->
+    <link rel="preconnect" href="https://jobconnect-api-gjtw.onrender.com" />
+    <link rel="dns-prefetch" href="https://jobconnect-api-gjtw.onrender.com" />
+    
+    <!-- Structured Data / Schema.org for Job Platform -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "JobConnect Nigeria",
+      "url": "https://jobconnect-sage.vercel.app",
+      "description": "Nigeria's most trusted platform connecting job seekers with verified opportunities through vetted agents.",
+      "publisher": {
+        "@type": "Organization",
+        "name": "JobConnect Nigeria",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://jobconnect-sage.vercel.app/job_connect_logo.png"
+        }
+      },
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://jobconnect-sage.vercel.app/jobs?search={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    
+    <!-- Main Entry -->
     <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- Service Worker Registration -->
     <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js');
-  }
-</script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function(registration) {
+              console.log('✅ ServiceWorker registered with scope:', registration.scope);
+            })
+            .catch(function(err) {
+              console.log('⚠️ ServiceWorker registration failed:', err);
+            });
+        });
+      }
+    </script>
+    
+    <!-- NoScript Fallback -->
+    <noscript>
+      <div style="text-align:center; padding:40px; font-family:Arial,sans-serif;">
+        <h1>JobConnect Nigeria</h1>
+        <p>JavaScript is required to use this application.</p>
+        <p>Please enable JavaScript in your browser settings.</p>
+        <p>📧 Contact: eitsolutions556@gmail.com | 📞 +2348163464557</p>
+      </div>
+    </noscript>
   </body>
 </html>

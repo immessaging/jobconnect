@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './ContractAgreement.css';
 
 function ContractAgreement({ 
@@ -6,9 +6,9 @@ function ContractAgreement({
   isOpen, 
   onClose, 
   onAgree, 
-  commissionPercentage, 
-  isNegotiable,
-  monthlySalary 
+  commissionPercentage, // Comes from job data (agent sets this)
+  isNegotiable = true,
+  monthlySalary = 0
 }) {
   const [step, setStep] = useState(1); // 1=Read, 2=Terms, 3=Sign
   const [agreed, setAgreed] = useState(false);
@@ -20,44 +20,82 @@ function ContractAgreement({
     transparent: false
   });
 
-  const commissionAmount = (monthlySalary * commissionPercentage) / 100;
+  // Reset state when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setStep(1);
+      setSignature('');
+      setCheckedTerms({
+        understood: false,
+        binding: false,
+        refund: false,
+        transparent: false
+      });
+    }
+  }, [isOpen]);
+
+  // Ensure valid numbers
+  const salary = Number(monthlySalary) || 0;
+  const percentage = Number(commissionPercentage) || 15;
+  const commissionAmount = (salary * percentage) / 100;
   const platformFee = (commissionAmount * 17) / 100;
   const agentPayout = (commissionAmount * 83) / 100;
 
-  const handleAgree = () => {
-    if (step === 1) setStep(2);
-    else if (step === 2 && Object.values(checkedTerms).every(v => v)) setStep(3);
-    else if (step === 3 && signature.trim()) {
+  const allTermsChecked = Object.values(checkedTerms).every(v => v);
+
+  const handleNext = () => {
+    if (step === 1) {
+      setStep(2);
+    } else if (step === 2 && allTermsChecked) {
+      setStep(3);
+    }
+  };
+
+  const handleSign = () => {
+    if (step === 3 && signature.trim()) {
       onAgree({
         commissionAmount,
         platformFee,
         agentPayout,
         percentage: commissionPercentage,
-        signature,
+        signature: signature.trim(),
         timestamp: new Date().toISOString()
       });
     }
   };
 
+  const handleClose = () => {
+    setStep(1);
+    setSignature('');
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="contract-overlay">
+    <div className="contract-overlay" onClick={(e) => {
+      // Close only if clicking the overlay background
+      if (e.target === e.currentTarget) handleClose();
+    }}>
       <div className="contract-modal">
-        <button className="modal-close-btn" onClick={onClose}>✕</button>
+        <button className="modal-close-btn" onClick={handleClose}>✕</button>
         
         {/* Step Indicator */}
         <div className="step-indicator">
-          <div className={`step-dot ${step >= 1 ? 'active' : ''}`}>1</div>
+          <div className={`step-dot ${step >= 1 ? 'active' : ''}`}>
+            {step > 1 ? '✓' : '1'}
+          </div>
           <div className={`step-line ${step >= 2 ? 'active' : ''}`}></div>
-          <div className={`step-dot ${step >= 2 ? 'active' : ''}`}>2</div>
+          <div className={`step-dot ${step >= 2 ? 'active' : ''}`}>
+            {step > 2 ? '✓' : '2'}
+          </div>
           <div className={`step-line ${step >= 3 ? 'active' : ''}`}></div>
           <div className={`step-dot ${step >= 3 ? 'active' : ''}`}>3</div>
         </div>
         <div className="step-labels">
-          <span>Read Contract</span>
-          <span>Accept Terms</span>
-          <span>Sign & Submit</span>
+          <span className={step >= 1 ? 'active' : ''}>Read Contract</span>
+          <span className={step >= 2 ? 'active' : ''}>Accept Terms</span>
+          <span className={step >= 3 ? 'active' : ''}>Sign & Submit</span>
         </div>
 
         {/* Step 1: Full Contract */}
@@ -67,21 +105,26 @@ function ContractAgreement({
             <div className="contract-content">
               <div className="contract-header">
                 <h3>JobConnect Nigeria - Commission Agreement</h3>
-                <p>Agreement Date: {new Date().toLocaleDateString()}</p>
+                <p>Agreement Date: {new Date().toLocaleDateString('en-NG', { 
+                  weekday: 'long', 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                })}</p>
               </div>
 
               <div className="contract-section">
                 <h4>1. PARTIES INVOLVED</h4>
-                <p><strong>Job Agent:</strong> Verified Agent (Agent ID: Hidden for privacy)</p>
+                <p><strong>Job Agent:</strong> Verified Agent (Identity verified by JobConnect)</p>
                 <p><strong>Job Seeker:</strong> You (Identity verified by JobConnect)</p>
                 <p><strong>Platform:</strong> JobConnect Nigeria (Escrow & Mediation)</p>
               </div>
 
               <div className="contract-section">
                 <h4>2. JOB DETAILS</h4>
-                <p><strong>Position:</strong> {job?.title}</p>
-                <p><strong>Organization:</strong> [Revealed after payment confirmation]</p>
-                <p><strong>Monthly Salary:</strong> ₦{monthlySalary.toLocaleString()}</p>
+                <p><strong>Position:</strong> {job?.title || 'Job Position'}</p>
+                <p><strong>Organization:</strong> <span className="blurred-text">[Revealed after payment]</span></p>
+                <p><strong>Monthly Salary:</strong> ₦{salary.toLocaleString()}</p>
                 <p><strong>Salary Type:</strong> {job?.salary_type || 'Monthly'}</p>
               </div>
 
@@ -90,11 +133,11 @@ function ContractAgreement({
                 <div className="commission-breakdown">
                   <div className="breakdown-row">
                     <span>Monthly Salary</span>
-                    <span>₦{monthlySalary.toLocaleString()}</span>
+                    <span>₦{salary.toLocaleString()}</span>
                   </div>
                   <div className="breakdown-row">
                     <span>Commission Rate</span>
-                    <span>{commissionPercentage}%</span>
+                    <span>{percentage}%</span>
                   </div>
                   <div className="breakdown-row total">
                     <span>Total Commission (One-Time)</span>
@@ -109,11 +152,10 @@ function ContractAgreement({
                     <span>₦{agentPayout.toLocaleString()}</span>
                   </div>
                 </div>
-                {isNegotiable && (
-                  <p className="negotiable-badge">🔄 This commission is NEGOTIABLE - You may discuss with the agent</p>
-                )}
-                {!isNegotiable && (
-                  <p className="non-negotiable-badge">🔒 This commission is FIXED - Non-negotiable</p>
+                {isNegotiable ? (
+                  <p className="negotiable-badge">🔄 This commission is <strong>NEGOTIABLE</strong> - You may discuss with the agent</p>
+                ) : (
+                  <p className="non-negotiable-badge">🔒 This commission is <strong>FIXED</strong> - Non-negotiable</p>
                 )}
               </div>
 
@@ -172,8 +214,8 @@ function ContractAgreement({
               </div>
             </div>
 
-            <button className="btn-contract" onClick={handleAgree}>
-              Next: Accept Terms →
+            <button className="btn-contract" onClick={handleNext}>
+              I've Read the Contract - Next: Accept Terms →
             </button>
           </div>
         )}
@@ -185,7 +227,7 @@ function ContractAgreement({
             <p className="terms-intro">Please check all boxes to confirm your understanding:</p>
             
             <div className="checkbox-list">
-              <label className="checkbox-item">
+              <label className={`checkbox-item ${checkedTerms.understood ? 'checked' : ''}`}>
                 <input 
                   type="checkbox" 
                   checked={checkedTerms.understood}
@@ -194,7 +236,7 @@ function ContractAgreement({
                 <span>I have read and fully understand all the terms herein stated as binding to me</span>
               </label>
 
-              <label className="checkbox-item">
+              <label className={`checkbox-item ${checkedTerms.binding ? 'checked' : ''}`}>
                 <input 
                   type="checkbox" 
                   checked={checkedTerms.binding}
@@ -203,7 +245,7 @@ function ContractAgreement({
                 <span>I agree that this contract is legally binding and enforceable</span>
               </label>
 
-              <label className="checkbox-item">
+              <label className={`checkbox-item ${checkedTerms.refund ? 'checked' : ''}`}>
                 <input 
                   type="checkbox" 
                   checked={checkedTerms.refund}
@@ -212,7 +254,7 @@ function ContractAgreement({
                 <span>I understand the refund policy (21-day dispute window, agent confirmation required)</span>
               </label>
 
-              <label className="checkbox-item">
+              <label className={`checkbox-item ${checkedTerms.transparent ? 'checked' : ''}`}>
                 <input 
                   type="checkbox" 
                   checked={checkedTerms.transparent}
@@ -222,13 +264,18 @@ function ContractAgreement({
               </label>
             </div>
 
-            <button 
-              className="btn-contract" 
-              onClick={handleAgree}
-              disabled={!Object.values(checkedTerms).every(v => v)}
-            >
-              Next: Sign Agreement →
-            </button>
+            <div className="step-navigation">
+              <button className="btn-back" onClick={() => setStep(1)}>
+                ← Back to Contract
+              </button>
+              <button 
+                className="btn-contract" 
+                onClick={handleNext}
+                disabled={!allTermsChecked}
+              >
+                {allTermsChecked ? 'Next: Sign Agreement →' : 'Please check all boxes'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -245,27 +292,51 @@ function ContractAgreement({
                 value={signature}
                 onChange={e => setSignature(e.target.value)}
                 className="signature-input"
+                autoFocus
               />
               <p className="signature-note">
                 By typing your name, you are signing this agreement electronically. 
-                This has the same legal effect as a handwritten signature.
+                This has the same legal effect as a handwritten signature under the 
+                Nigerian Evidence Act.
               </p>
             </div>
 
             <div className="agreement-summary">
               <h4>Agreement Summary:</h4>
-              <p>📋 Commission: {commissionPercentage}% of ₦{monthlySalary.toLocaleString()}</p>
-              <p>💰 Total Amount: ₦{commissionAmount.toLocaleString()}</p>
-              <p>🔄 {isNegotiable ? 'Negotiable' : 'Non-Negotiable'}</p>
+              <div className="summary-grid">
+                <div className="summary-item">
+                  <span>📋 Commission:</span>
+                  <strong>{percentage}% of ₦{salary.toLocaleString()}</strong>
+                </div>
+                <div className="summary-item">
+                  <span>💰 Total Amount:</span>
+                  <strong>₦{commissionAmount.toLocaleString()}</strong>
+                </div>
+                <div className="summary-item">
+                  <span>🔄 Type:</span>
+                  <strong>{isNegotiable ? 'Negotiable' : 'Non-Negotiable'}</strong>
+                </div>
+                <div className="summary-item">
+                  <span>📅 Date:</span>
+                  <strong>{new Date().toLocaleDateString()}</strong>
+                </div>
+              </div>
             </div>
 
-            <button 
-              className="btn-contract btn-sign"
-              onClick={handleAgree}
-              disabled={!signature.trim()}
-            >
-              ✅ I Have Read & Agree - Sign & Continue to Payment
-            </button>
+            <div className="step-navigation">
+              <button className="btn-back" onClick={() => setStep(2)}>
+                ← Back to Terms
+              </button>
+              <button 
+                className="btn-contract btn-sign"
+                onClick={handleSign}
+                disabled={!signature.trim()}
+              >
+                {signature.trim() 
+                  ? '✅ I Agree - Sign & Continue to Payment' 
+                  : 'Please type your name to sign'}
+              </button>
+            </div>
           </div>
         )}
       </div>

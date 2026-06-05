@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Auth.css';
 
@@ -7,63 +7,257 @@ function SignIn() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [serverStatus, setServerStatus] = useState('checking'); // 'online', 'offline', 'checking'
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  // Check if user is already logged in
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        if (user.user_type === 'agent') navigate('/dashboard/agent');
+        else if (user.user_type === 'super_admin' || user.email === 'admin@jobconnect.com') navigate('/dashboard/admin');
+        else if (user.user_type === 'staff') navigate('/dashboard/staff');
+        else navigate('/dashboard/seeker');
+      } catch (e) {
+        localStorage.removeItem('user');
+      }
+    }
+  }, [navigate]);
+
+  // Check server status
+  useEffect(() => {
+    const checkServer = async () => {
+      try {
+        const res = await fetch('https://jobconnect-api-gjtw.onrender.com/', { 
+          method: 'GET',
+          signal: AbortSignal.timeout(5000)
+        });
+        if (res.ok) {
+          setServerStatus('online');
+        } else {
+          setServerStatus('offline');
+        }
+      } catch {
+        setServerStatus('offline');
+      }
+    };
+    checkServer();
+  }, []);
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!formData.email || !formData.password) { setError('Fill all fields'); return; }
+
+    // Validation
+    if (!formData.email.trim()) {
+      setError('Please enter your email address');
+      return;
+    }
+    if (!formData.email.includes('@')) {
+      setError('Please enter a valid email address');
+      return;
+    }
+    if (!formData.password) {
+      setError('Please enter your password');
+      return;
+    }
+
     setLoading(true);
+
     try {
-      const res = await fetch('https://jobconnect-api-gjtw.onrender.com/api/auth/login', {
+      const API_URL = 'https://jobconnect-api-gjtw.onrender.com';
+      
+      const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: formData.email, password: formData.password })
+        body: JSON.stringify({ 
+          email: formData.email.trim(), 
+          password: formData.password 
+        }),
+        signal: AbortSignal.timeout(15000) // 15 second timeout
       });
+
       const data = await res.json();
-      if (data.success) {
-        const u = data.user;
-        localStorage.setItem('user', JSON.stringify({ id: u.id, email: u.email, user_type: u.user_type, is_verified: u.is_verified }));
-        if (u.user_type === 'agent') navigate('/dashboard/agent');
-        else if (u.user_type === 'super_admin' || u.user_type === 'admin') navigate('/dashboard/admin');
-        else if (u.user_type === 'staff') navigate('/dashboard/staff');
-        else navigate('/dashboard/seeker');
+
+      if (data.success && data.user) {
+        const user = data.user;
+        
+        // Store user data
+        const userToStore = {
+          id: user.id,
+          email: user.email,
+          user_type: user.user_type,
+          is_verified: user.is_verified || false,
+          verification_status: user.verification_status || 'pending',
+          adminLevel: user.email === 'admin@jobconnect.com' ? 'admin' : user.adminLevel
+        };
+
+        // Save to localStorage (or sessionStorage if not remember me)
+        if (rememberMe) {
+          localStorage.setItem('user', JSON.stringify(userToStore));
+        } else {
+          sessionStorage.setItem('user', JSON.stringify(userToStore));
+        }
+
+        console.log('✅ Login successful:', user.email, '| Type:', user.user_type);
+
+        // Redirect based on user type
+        if (user.user_type === 'agent') {
+          navigate('/dashboard/agent');
+        } else if (user.user_type === 'super_admin' || user.email === 'admin@jobconnect.com') {
+          navigate('/dashboard/admin');
+        } else if (user.user_type === 'staff') {
+          navigate('/dashboard/staff');
+        } else {
+          navigate('/dashboard/seeker');
+        }
       } else {
-        setError(data.error || 'Invalid credentials');
+        setError(data.error || 'Invalid email or password. Please try again.');
       }
     } catch (err) {
-      // Quick hardcoded check for test accounts only
-      if (formData.email === 'agent1@example.com' && formData.password === 'password123') {
-        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'agent' }));
-        navigate('/dashboard/agent');
-      } else if (formData.email === 'admin@jobconnect.com' && formData.password === 'admin123') {
-        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'super_admin', adminLevel: 'admin' }));
-        navigate('/dashboard/admin');
-      } else if (formData.email === 'seeker1@example.com' && formData.password === 'password123') {
-        localStorage.setItem('user', JSON.stringify({ email: formData.email, user_type: 'job_seeker' }));
-        navigate('/dashboard/seeker');
+      console.error('❌ Login error:', err);
+      
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        setError('⏰ Server is taking too long to respond. The free server may be waking up. Please try again in 10-15 seconds.');
+      } else if (err.message === 'Failed to fetch' || err.message.includes('NetworkError')) {
+        setError('📡 Unable to connect to server. Please check your internet connection and try again.');
       } else {
-        setError('Server waking up. Try again in 10 seconds.');
+        setError('❌ An error occurred. Please try again.');
       }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <div className="auth-left"><div className="auth-image">👋</div><h2>Welcome Back!</h2><p>Sign in to your account.</p></div>
+        {/* Left Side */}
+        <div className="auth-left">
+          <div className="auth-image">👋</div>
+          <h2>Welcome Back!</h2>
+          <p>Sign in to your account to access verified jobs and manage your applications.</p>
+          
+          {/* Server Status */}
+          <div className={`server-status ${serverStatus}`}>
+            <span className="status-dot"></span>
+            {serverStatus === 'online' && 'Server Online'}
+            {serverStatus === 'offline' && 'Server Starting... (Free Tier)'}
+            {serverStatus === 'checking' && 'Checking Server...'}
+          </div>
+        </div>
+
+        {/* Right Side */}
         <div className="auth-right">
-          <h2>Sign In</h2><p className="subtitle">Access your JobConnect account</p>
-          {error && <div className="error-message">{error}</div>}
+          <h2>Sign In</h2>
+          <p className="subtitle">Access your JobConnect account</p>
+
+          {error && (
+            <div className="error-message">
+              <span className="error-icon">⚠️</span>
+              <span>{error}</span>
+              <button onClick={() => setError('')} className="error-close">✕</button>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
-            <div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email} onChange={handleChange} required /></div>
-            <div className="form-group"><label>Password</label><input type="password" name="password" value={formData.password} onChange={handleChange} required /></div>
-            <div style={{textAlign:'right',marginBottom:'15px'}}><Link to="/reset-password" style={{color:'#d42027',fontSize:'13px'}}>Forgot Password?</Link></div>
-            <button type="submit" className="auth-btn" disabled={loading}>{loading ? 'Signing In...' : 'Sign In'}</button>
+            {/* Email */}
+            <div className="form-group">
+              <label>Email Address</label>
+              <input
+                type="email"
+                name="email"
+                placeholder="your@email.com"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                autoComplete="email"
+                autoFocus
+              />
+            </div>
+
+            {/* Password */}
+            <div className="form-group">
+              <label>Password</label>
+              <div className="password-input-wrapper">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  placeholder="Enter your password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
+                >
+                  {showPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
+            </div>
+
+            {/* Remember Me & Forgot Password */}
+            <div className="form-options">
+              <label className="remember-me">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
+                <span>Remember me</span>
+              </label>
+              <Link to="/reset-password" className="forgot-password">
+                Forgot Password?
+              </Link>
+            </div>
+
+            {/* Submit */}
+            <button type="submit" className="auth-btn" disabled={loading || serverStatus === 'checking'}>
+              {loading ? (
+                <>
+                  <span className="spinner-small"></span>
+                  Signing In...
+                </>
+              ) : (
+                'Sign In'
+              )}
+            </button>
           </form>
-          <div className="auth-link">Don't have an account? <Link to="/signup">Sign Up</Link></div>
+
+          {/* Demo Accounts Info */}
+          <div className="demo-accounts">
+            <details>
+              <summary>🔑 Demo Accounts (Click to expand)</summary>
+              <div className="demo-accounts-list">
+                <div className="demo-account">
+                  <strong>Admin:</strong> admin@jobconnect.com / admin123
+                </div>
+                <div className="demo-account">
+                  <strong>Agent:</strong> agent1@example.com / password123
+                </div>
+                <div className="demo-account">
+                  <strong>Seeker:</strong> seeker1@example.com / password123
+                </div>
+              </div>
+            </details>
+          </div>
+
+          {/* Sign Up Link */}
+          <div className="auth-link">
+            Don't have an account? <Link to="/signup">Sign Up Now</Link>
+          </div>
         </div>
       </div>
     </div>

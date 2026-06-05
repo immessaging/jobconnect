@@ -1,0 +1,271 @@
+.kyc-cost-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 25px;
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.kyc-cost-card.error {
+  text-align: center;
+  padding: 40px;
+}
+
+.kyc-cost-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #f0f0f0;
+  border-top: 3px solid #d4a843;
+  padding-top: 5px;
+}
+
+.kyc-icon {
+  font-size: 2.5rem;
+  flex-shrink: 0;
+}
+
+.kyc-cost-header h4 {
+  margin: 0 0 5px 0;
+  color: #0a1628;
+  font-size: 18px;
+}
+
+.kyc-description {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+/* Provider */
+.kyc-provider {
+  background: #f8f9fa;
+  padding: 12px 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.provider-label {
+  font-size: 13px;
+  color: #666;
+}
+
+.provider-name {
+  font-weight: bold;
+  color: #0a1628;
+  font-size: 14px;
+}
+
+/* Cost Display */
+.kyc-cost-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: linear-gradient(135deg, #0a1628, #1a2a4a);
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.cost-label {
+  color: #ccc;
+  font-size: 14px;
+}
+
+.cost-amount {
+  color: #d4a843;
+  font-size: 22px;
+  font-weight: bold;
+}
+
+/* Processing Time */
+.kyc-processing {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 15px;
+  background: #f0f7ff;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.processing-label {
+  color: #666;
+  font-size: 13px;
+}
+
+.processing-time {
+  font-weight: bold;
+  color: #0a1628;
+}
+
+/* Details */
+.kyc-details {
+  margin-bottom: 20px;
+}
+
+.kyc-details h5 {
+  color: #0a1628;
+  margin: 0 0 10px 0;
+  font-size: 14px;
+}
+
+.kyc-details ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.kyc-details li {
+  padding: 6px 0;
+  color: #555;
+  font-size: 13px;
+}
+
+/* Note */
+.kyc-note {
+  background: #fff8e1;
+  border: 1px solid #ffcc02;
+  border-radius: 8px;
+  padding: 12px 15px;
+  margin-bottom: 20px;
+}
+
+.kyc-note p {
+  margin: 0;
+  font-size: 12px;
+  color: #856404;
+  line-height: 1.5;
+}
+
+/* Agreement */
+.kyc-agreement {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #555;
+}
+
+.kyc-agreement input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Actions */
+.kyc-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.btn-cancel {
+  padding: 12px 20px;
+  background: #f0f0f0;
+  color: #666;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.btn-cancel:hover {
+  background: #e0e0e0;
+}
+
+.btn-proceed {
+  flex: 1;
+  padding: 12px 20px;
+  background: #d4a843;
+  color: #0a1628;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.btn-proceed:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.btn-proceed:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-back {
+  padding: 10px 20px;
+  background: #d4a843;
+  color: #0a1628;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 15px;
+}
+
+/* Breakdown */
+.kyc-breakdown {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.breakdown-title {
+  font-weight: bold;
+  color: #0a1628;
+  margin: 0 0 10px 0;
+  font-size: 14px;
+}
+
+.breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 13px;
+  color: #555;
+}
+
+.breakdown-row.total {
+  border-top: 1px solid #e0e0e0;
+  padding-top: 8px;
+  margin-top: 5px;
+  font-weight: bold;
+  color: #0a1628;
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .kyc-cost-card {
+    padding: 15px;
+    border-radius: 8px;
+  }
+  
+  .kyc-cost-header {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .kyc-actions {
+    flex-direction: column;
+  }
+  
+  .cost-amount {
+    font-size: 18px;
+  }
+}
