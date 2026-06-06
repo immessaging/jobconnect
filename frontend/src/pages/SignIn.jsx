@@ -9,11 +9,11 @@ function SignIn() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [serverStatus, setServerStatus] = useState('checking'); // 'online', 'offline', 'checking'
+  const [serverStatus, setServerStatus] = useState('checking');
 
   // Check if user is already logged in
   useEffect(() => {
-    const userData = localStorage.getItem('user');
+    const userData = localStorage.getItem('user') || sessionStorage.getItem('user');
     if (userData) {
       try {
         const user = JSON.parse(userData);
@@ -23,6 +23,7 @@ function SignIn() {
         else navigate('/dashboard/seeker');
       } catch (e) {
         localStorage.removeItem('user');
+        sessionStorage.removeItem('user');
       }
     }
   }, [navigate]);
@@ -33,7 +34,7 @@ function SignIn() {
       try {
         const res = await fetch('https://jobconnect-api-gjtw.onrender.com/', { 
           method: 'GET',
-          signal: AbortSignal.timeout(5000)
+          signal: AbortSignal.timeout(10000)
         });
         if (res.ok) {
           setServerStatus('online');
@@ -71,6 +72,7 @@ function SignIn() {
     }
 
     setLoading(true);
+    setError('⏳ Connecting to server... Please wait up to 60 seconds.');
 
     try {
       const API_URL = 'https://jobconnect-api-gjtw.onrender.com';
@@ -82,7 +84,7 @@ function SignIn() {
           email: formData.email.trim(), 
           password: formData.password 
         }),
-        signal: AbortSignal.timeout(15000) // 15 second timeout
+        signal: AbortSignal.timeout(60000)
       });
 
       const data = await res.json();
@@ -90,7 +92,6 @@ function SignIn() {
       if (data.success && data.user) {
         const user = data.user;
         
-        // Store user data
         const userToStore = {
           id: user.id,
           email: user.email,
@@ -100,7 +101,6 @@ function SignIn() {
           adminLevel: user.email === 'admin@jobconnect.com' ? 'admin' : user.adminLevel
         };
 
-        // Save to localStorage (or sessionStorage if not remember me)
         if (rememberMe) {
           localStorage.setItem('user', JSON.stringify(userToStore));
         } else {
@@ -109,7 +109,6 @@ function SignIn() {
 
         console.log('✅ Login successful:', user.email, '| Type:', user.user_type);
 
-        // Redirect based on user type
         if (user.user_type === 'agent') {
           navigate('/dashboard/agent');
         } else if (user.user_type === 'super_admin' || user.email === 'admin@jobconnect.com') {
@@ -126,11 +125,11 @@ function SignIn() {
       console.error('❌ Login error:', err);
       
       if (err.name === 'TimeoutError' || err.name === 'AbortError') {
-        setError('⏰ Server is taking too long to respond. The free server may be waking up. Please try again in 10-15 seconds.');
+        setError('⏰ Server is waking up (free tier). Please wait 30 seconds and try again.');
       } else if (err.message === 'Failed to fetch' || err.message.includes('NetworkError')) {
-        setError('📡 Unable to connect to server. Please check your internet connection and try again.');
+        setError('📡 Unable to connect. Please check your internet and try again.');
       } else {
-        setError('❌ An error occurred. Please try again.');
+        setError('❌ Connection error. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -146,7 +145,6 @@ function SignIn() {
           <h2>Welcome Back!</h2>
           <p>Sign in to your account to access verified jobs and manage your applications.</p>
           
-          {/* Server Status */}
           <div className={`server-status ${serverStatus}`}>
             <span className="status-dot"></span>
             {serverStatus === 'online' && 'Server Online'}
@@ -169,7 +167,6 @@ function SignIn() {
           )}
 
           <form onSubmit={handleSubmit}>
-            {/* Email */}
             <div className="form-group">
               <label>Email Address</label>
               <input
@@ -184,7 +181,6 @@ function SignIn() {
               />
             </div>
 
-            {/* Password */}
             <div className="form-group">
               <label>Password</label>
               <div className="password-input-wrapper">
@@ -208,7 +204,6 @@ function SignIn() {
               </div>
             </div>
 
-            {/* Remember Me & Forgot Password */}
             <div className="form-options">
               <label className="remember-me">
                 <input
@@ -223,8 +218,7 @@ function SignIn() {
               </Link>
             </div>
 
-            {/* Submit */}
-            <button type="submit" className="auth-btn" disabled={loading || serverStatus === 'checking'}>
+            <button type="submit" className="auth-btn" disabled={loading}>
               {loading ? (
                 <>
                   <span className="spinner-small"></span>
@@ -236,7 +230,6 @@ function SignIn() {
             </button>
           </form>
 
-          {/* Demo Accounts Info */}
           <div className="demo-accounts">
             <details>
               <summary>🔑 Demo Accounts (Click to expand)</summary>
@@ -254,7 +247,6 @@ function SignIn() {
             </details>
           </div>
 
-          {/* Sign Up Link */}
           <div className="auth-link">
             Don't have an account? <Link to="/signup">Sign Up Now</Link>
           </div>
