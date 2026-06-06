@@ -12,8 +12,8 @@ function Home() {
   });
   const [testimonials, setTestimonials] = useState([]);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-  // Images from /public folder (works in both dev and production)
   const slides = [
     { img: '/ad_jobcon.png', title: 'Find Verified Jobs', text: 'Your dream job is just a click away' },
     { img: '/secure.png', title: '100% Secure', text: 'Your payments are protected with escrow' },
@@ -22,15 +22,32 @@ function Home() {
   ];
 
   useEffect(() => {
-    // Fetch real-time platform stats from database
-    getPlatformStats()
-      .then(res => setStats(res.data.stats))
-      .catch(console.log);
-    
-    getTestimonials()
-      .then(res => setTestimonials(res.data.testimonials || []))
-      .catch(console.log);
-    
+    const fetchData = async () => {
+      try {
+        // Fetch stats
+        const statsRes = await getPlatformStats();
+        const statsData = statsRes.data?.data?.stats || statsRes.data?.stats || statsRes.data || {};
+        console.log('📊 Stats:', statsData);
+        setStats(statsData);
+      } catch (err) {
+        console.log('❌ Stats fetch failed:', err);
+      }
+
+      try {
+        // Fetch testimonials
+        const testRes = await getTestimonials();
+        const testData = testRes.data?.data?.testimonials || testRes.data?.testimonials || [];
+        console.log('⭐ Testimonials:', testData.length);
+        setTestimonials(testData);
+      } catch (err) {
+        console.log('❌ Testimonials fetch failed:', err);
+      }
+
+      setLoading(false);
+    };
+
+    fetchData();
+
     const interval = setInterval(() => {
       setCurrentSlide(prev => (prev + 1) % slides.length);
     }, 5000);
