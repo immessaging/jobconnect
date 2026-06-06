@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en-NG">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline - JobConnect Nigeria</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #0a1628;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 20px;
+    }
+    .offline-container {
+      max-width: 400px;
+    }
+    .offline-icon {
+      font-size: 5rem;
+      margin-bottom: 20px;
+    }
+    h1 {
+      color: #d4a843;
+      margin-bottom: 15px;
+      font-size: 24px;
+    }
+    p {
+      color: #ccc;
+      margin-bottom: 25px;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    .retry-btn {
+      display: inline-block;
+      padding: 12px 30px;
+      background: #d4a843;
+      color: #0a1628;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.3s;
+    }
+    .retry-btn:hover {
+      background: #e0b84e;
+      transform: translateY(-2px);
+    }
+    .contact-info {
+      margin-top: 30px;
+      font-size: 13px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="offline-container">
+    <div class="offline-icon">📡</div>
+    <h1>You're Offline</h1>
+    <p>Please check your internet connection and try again. JobConnect Nigeria requires an active connection.</p>
+    <button onclick="location.reload()" class="retry-btn">🔄 Try Again</button>
+    <div class="contact-info">
+      <p>📧 eitsolutions556@gmail.com</p>
+      <p>📞 +2348163464557</p>
+    </div>
+  </div>
+</body>
+</html>
