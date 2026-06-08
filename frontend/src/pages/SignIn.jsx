@@ -55,12 +55,10 @@ function SignIn() {
       const res = await fetch('https://jobconnect-api-gjtw.onrender.com/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email: formData.email.trim(), 
-          password: formData.password 
-        })
-      });
-
+       body: JSON.stringify({ 
+    email: formData.email.trim().toLowerCase(), 
+    password: formData.password 
+})
       const data = await res.json();
 
       if (data.success && data.user) {
