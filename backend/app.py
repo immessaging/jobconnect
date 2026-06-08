@@ -365,7 +365,7 @@ def login():
         data = request.json
         if not data:
             return error_response("Request body is required", 400)
-        email = data.get('email', '').strip().lower()
+        email = data.get('email', '').strip().lower().replace('%40', '@')
         password = data.get('password', '')
         if not email or not password:
             return error_response("Email and password required", 400)
@@ -635,6 +635,56 @@ def get_users_list():
         return error_response(str(e), 400)
     finally:
         cur.close()
+        conn.close()
+        # ============================================
+# RESET PASSWORD
+# ============================================
+@app.route('/api/auth/reset-password', methods=['POST'])
+@limiter.limit("3 per hour")
+def reset_password():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    try:
+        data = request.json
+        if not data:
+            return error_response("Request body is required", 400)
+        
+        email = data.get('email', '').strip().lower()
+        new_password = data.get('new_password', '')
+        
+        if not email or not new_password:
+            return error_response("Email and new password are required", 400)
+        if len(new_password) < 6:
+            return error_response("Password must be at least 6 characters", 400)
+        if '@' not in email:
+            return error_response("Invalid email format", 400)
+        
+        cur = conn.cursor()
+        
+        # Check if user exists
+        cur.execute("SELECT id FROM users WHERE LOWER(email) = %s", (email,))
+        user = cur.fetchone()
+        if not user:
+            return error_response("No account found with this email", 404)
+        
+        # Hash new password
+        new_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        
+        # Update password
+        cur.execute("UPDATE users SET password_hash = %s, updated_at = NOW() WHERE id = %s", (new_hash, str(user[0])))
+        conn.commit()
+        
+        print(f'🔒 Password reset for {email}')
+        
+        return success_response(message="Password reset successfully!")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        if 'cur' in locals():
+            cur.close()
         conn.close()
 # ============================================
 # ERROR HANDLERS
