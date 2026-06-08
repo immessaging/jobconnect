@@ -59,6 +59,15 @@
     <link rel="dns-prefetch" href="https://jobconnect-api-gjtw.onrender.com" />
     
     <!-- Structured Data / Schema.org for Job Platform -->
+     <script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+    for(let registration of registrations) {
+      registration.unregister();
+    }
+  });
+}
+</script>
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
