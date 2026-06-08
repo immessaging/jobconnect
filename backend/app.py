@@ -686,6 +686,55 @@ def reset_password():
         if 'cur' in locals():
             cur.close()
         conn.close()
+        # ============================================
+# ADMIN ROUTES
+# ============================================
+@app.route('/api/admin/users', methods=['GET'])
+@require_admin
+def admin_get_all_users():
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, email, phone, user_type, is_verified, verification_status, full_name, created_at FROM users ORDER BY created_at DESC")
+        users = [{"id": safe_str(r[0]), "email": r[1], "phone": r[2], "type": r[3], "verified": r[4], "verification_status": r[5], "full_name": r[6], "created_at": safe_str(r[7])} for r in cur.fetchall()]
+        return success_response(data={"users": users, "count": len(users)})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
+
+@app.route('/api/admin/verifications', methods=['GET'])
+@require_admin
+def get_all_verifications():
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, email, user_type, full_name, verification_status, nin, bvn, bank_name, account_number, address, created_at FROM users WHERE verification_status = 'pending' ORDER BY created_at DESC")
+        users = [{"id": safe_str(r[0]), "email": r[1], "user_type": r[2], "full_name": r[3], "verification_status": r[4], "nin": r[5], "bvn": r[6], "bank_name": r[7], "account_number": r[8], "address": r[9], "created_at": safe_str(r[10])} for r in cur.fetchall()]
+        return success_response(data={"users": users, "count": len(users)})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
+
+@app.route('/api/admin/verify/<user_id>', methods=['POST'])
+@require_admin
+def verify_user(user_id):
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        data = request.json
+        action = data.get('action')
+        if action not in ['approve', 'reject']: return error_response("Action must be 'approve' or 'reject'", 400)
+        cur = conn.cursor()
+        if action == 'approve': cur.execute("UPDATE users SET is_verified = true, verification_status = 'verified', updated_at = NOW() WHERE id = %s", (user_id,))
+        else: cur.execute("UPDATE users SET verification_status = 'rejected', updated_at = NOW() WHERE id = %s", (user_id,))
+        conn.commit()
+        return success_response(message=f"User {action}d successfully")
+    except Exception as e:
+        if conn: conn.rollback()
+        return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
 # ============================================
 # ERROR HANDLERS
 # ============================================
