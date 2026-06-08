@@ -20,13 +20,10 @@ load_dotenv()
 app = Flask(__name__)
 
 # CORS Configuration
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
-
 CORS(app, resources={
-    r"/*" :{
+    r"/api/*": {   # ← Change back to /api/*
         "origins": [
             "https://jobconnect-sage.vercel.app",
-            "https://jobconnect-sage-*.vercel.app",
             "http://localhost:3000",
             "http://localhost:5000"
         ],
@@ -35,7 +32,13 @@ CORS(app, resources={
         "supports_credentials": True
     }
 })
-
+# Add CORS for root health check
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = 'https://jobconnect-sage.vercel.app'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-User-Data, X-Admin-Id'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    return response
 # Rate Limiting Configuration
 limiter = Limiter(
     app=app,
