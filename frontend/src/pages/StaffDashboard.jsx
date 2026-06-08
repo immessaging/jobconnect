@@ -89,7 +89,7 @@ function StaffDashboard() {
     } else {
       setLoading(false);
     }
-  }, [navigate]);
+  }, []);
 
   // ============================================
   // HANDLERS

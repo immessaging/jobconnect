@@ -99,7 +99,7 @@ function JobSeekerDashboard() {
     };
     
     fetchData();
-  }, [navigate]);
+  }, []);
 
   // ============================================
   // HANDLERS

@@ -137,7 +137,7 @@ function AgentDashboard() {
     
     initDashboard();
     setTimeout(() => requestLocationAccess(), 1000);
-  }, [navigate]);
+  }, []);
 
   // ============================================
   // DATA LOADING FUNCTIONS

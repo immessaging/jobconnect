@@ -102,7 +102,7 @@ function AdminDashboard() {
     setUser(parsedUser);
     
     fetchAllDashboardData();
-  }, [navigate]);
+  }, []);
 
   const fetchAllDashboardData = async () => {
     setLoading(true);
