@@ -497,10 +497,149 @@ def register():
 # CONTACT, GPS, LOGS, COMMUNICATION
 # ============================================
 # [... Keep all the remaining routes from your file ...]
+# ============================================
+# PLATFORM STATS
+# ============================================
+@app.route('/api/stats', methods=['GET'])
+def get_platform_stats():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        stats = {}
+        queries = {
+            'active_jobs': "SELECT COUNT(*) FROM job_listings WHERE status = 'active'",
+            'jobs_secured': "SELECT COUNT(*) FROM job_listings WHERE status = 'filled'",
+            'total_users': "SELECT COUNT(*) FROM users",
+            'verified_agents': "SELECT COUNT(*) FROM users WHERE user_type = 'agent' AND is_verified = true",
+            'total_commission': "SELECT COALESCE(SUM(commission_amount), 0) FROM commission_agreements WHERE payment_status = 'paid'"
+        }
+        for key, query in queries.items():
+            cur.execute(query)
+            result = cur.fetchone()[0]
+            stats[key] = safe_float(result) if key == 'total_commission' else safe_int(result)
+        return success_response(data={"stats": stats})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
 
+# ============================================
+# TESTIMONIALS
+# ============================================
+@app.route('/api/testimonials', methods=['GET'])
+def get_testimonials():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, name, role, company, text, rating, is_verified, created_at FROM testimonials WHERE is_active = TRUE ORDER BY created_at DESC")
+        testimonials = []
+        for row in cur.fetchall():
+            testimonials.append({
+                "id": safe_str(row[0]), "name": row[1], "role": row[2],
+                "company": row[3], "text": row[4], "rating": safe_int(row[5]),
+                "is_verified": row[6], "created_at": safe_str(row[7])
+            })
+        return success_response(data={"testimonials": testimonials})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# ANALYTICS SUMMARY
+# ============================================
+@app.route('/api/analytics/summary', methods=['GET'])
+def get_analytics_summary():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        stats = {}
+        queries = {
+            'total_users': "SELECT COUNT(*) FROM users",
+            'total_agents': "SELECT COUNT(*) FROM users WHERE user_type = 'agent'",
+            'total_seekers': "SELECT COUNT(*) FROM users WHERE user_type = 'job_seeker'",
+            'active_jobs': "SELECT COUNT(*) FROM job_listings WHERE status = 'active'",
+            'filled_jobs': "SELECT COUNT(*) FROM job_listings WHERE status = 'filled'",
+            'pending_verifications': "SELECT COUNT(*) FROM users WHERE verification_status = 'pending'"
+        }
+        for key, query in queries.items():
+            cur.execute(query)
+            stats[key] = safe_int(cur.fetchone()[0])
+        return success_response(data={"stats": stats})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# ANNOUNCEMENTS
+# ============================================
+@app.route('/api/announcements', methods=['GET'])
+def get_announcements():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, title, content, priority, target_audience, created_at FROM announcements WHERE is_active = TRUE ORDER BY created_at DESC")
+        announcements = [{"id": safe_str(r[0]), "title": r[1], "content": r[2], "priority": r[3], "audience": r[4], "date": safe_str(r[5])} for r in cur.fetchall()]
+        return success_response(data={"announcements": announcements})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# TEST DATA
+# ============================================
+@app.route('/api/test-data')
+def test_data():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute('SELECT id, email, user_type, is_verified FROM users')
+        users = [{"id": safe_str(u[0]), "email": u[1], "type": u[2], "verified": u[3]} for u in cur.fetchall()]
+        return success_response(data={"users": users, "total_users": len(users)})
+    except Exception as e:
+        return error_response(str(e), 500)
+    finally:
+        cur.close()
+        conn.close()
+
+# ============================================
+# USERS LIST
+# ============================================
+@app.route('/api/users-list', methods=['GET'])
+def get_users_list():
+    conn = get_db_connection()
+    if not conn:
+        return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, email, user_type, phone, is_verified FROM users ORDER BY created_at DESC")
+        users = [{"id": safe_str(r[0]), "email": r[1], "user_type": r[2], "phone": r[3], "is_verified": r[4]} for r in cur.fetchall()]
+        return success_response(data={"users": users})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close()
+        conn.close()
 # ============================================
 # ERROR HANDLERS
 # ============================================
+
 @app.errorhandler(404)
 def not_found_error(error):
     return error_response("Endpoint not found", 404)
