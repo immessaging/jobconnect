@@ -12,13 +12,18 @@ const api = axios.create({
 
 // Add auth interceptor for admin routes
 api.interceptors.request.use((config) => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  if (user.email) {
-    config.headers['X-User-Data'] = JSON.stringify({
-      id: user.id,
-      email: user.email,
-      adminLevel: user.adminLevel || 'admin'
-    });
+  const userData = localStorage.getItem('user') || sessionStorage.getItem('user');
+  if (userData) {
+    try {
+      const user = JSON.parse(userData);
+      config.headers['X-User-Data'] = JSON.stringify({
+        id: user.id || '',
+        email: user.email || '',
+        adminLevel: user.adminLevel || (user.email === 'admin@jobconnect.com' ? 'admin' : 'user')
+      });
+    } catch (e) {
+      console.log('Auth header error:', e);
+    }
   }
   return config;
 });

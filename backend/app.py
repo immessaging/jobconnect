@@ -919,6 +919,189 @@ def admin_get_audit_logs():
         return success_response(data={"logs": logs})
     except Exception as e: return error_response(str(e), 400)
     finally: cur.close(); conn.close()
+
+    # ============================================
+# VERIFICATION SUBMIT
+# ============================================
+@app.route('/api/verify/submit', methods=['POST'])
+@limiter.limit("5 per day")
+def submit_verification():
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        data = request.json
+        user_id = data.get('user_id')
+        user_type = data.get('user_type', 'job_seeker')
+        if not user_id: return error_response("User ID is required", 400)
+        cur = conn.cursor()
+        if user_type == 'job_seeker':
+            cur.execute("UPDATE users SET verification_status = 'pending', full_name = COALESCE(%s, full_name), date_of_birth = COALESCE(%s::date, date_of_birth), address = COALESCE(%s, address), nin = COALESCE(%s, nin), next_of_kin_name = COALESCE(%s, next_of_kin_name), next_of_kin_phone = COALESCE(%s, next_of_kin_phone), emergency_contact_name = COALESCE(%s, emergency_contact_name), emergency_contact_phone = COALESCE(%s, emergency_contact_phone), social_media_1 = COALESCE(%s, social_media_1), social_media_2 = COALESCE(%s, social_media_2), updated_at = NOW() WHERE id = %s",
+                (data.get('full_name'), data.get('date_of_birth'), data.get('address'), data.get('nin'), data.get('next_of_kin_name'), data.get('next_of_kin_phone'), data.get('emergency_contact_name'), data.get('emergency_contact_phone'), data.get('social_media_1'), data.get('social_media_2'), user_id))
+        else:
+            cur.execute("UPDATE users SET verification_status = 'pending', full_name = COALESCE(%s, full_name), date_of_birth = COALESCE(%s::date, date_of_birth), address = COALESCE(%s, address), nin = COALESCE(%s, nin), bvn = COALESCE(%s, bvn), bank_name = COALESCE(%s, bank_name), account_number = COALESCE(%s, account_number), guarantor_name = COALESCE(%s, guarantor_name), guarantor_phone = COALESCE(%s, guarantor_phone), next_of_kin_name = COALESCE(%s, next_of_kin_name), next_of_kin_phone = COALESCE(%s, next_of_kin_phone), emergency_contact_name = COALESCE(%s, emergency_contact_name), emergency_contact_phone = COALESCE(%s, emergency_contact_phone), social_media_1 = COALESCE(%s, social_media_1), social_media_2 = COALESCE(%s, social_media_2), updated_at = NOW() WHERE id = %s",
+                (data.get('full_name'), data.get('date_of_birth'), data.get('address'), data.get('nin'), data.get('bvn'), data.get('bank_name'), data.get('account_number'), data.get('guarantor_name'), data.get('guarantor_phone'), data.get('next_of_kin_name'), data.get('next_of_kin_phone'), data.get('emergency_contact_name'), data.get('emergency_contact_phone'), data.get('social_media_1'), data.get('social_media_2'), user_id))
+        conn.commit()
+        return success_response(message="Verification submitted successfully!")
+    except Exception as e:
+        if conn: conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        if 'cur' in locals(): cur.close()
+        conn.close()
+
+# ============================================
+# USER PROFILE
+# ============================================
+@app.route('/api/user/profile/<user_id>', methods=['GET'])
+def get_user_profile(user_id):
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        if not user: return error_response("User not found", 404)
+        columns = [desc[0] for desc in cur.description]
+        profile = {col: safe_str(user[i]) for i, col in enumerate(columns)}
+        return success_response(data={"profile": profile})
+    except Exception as e: return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
+
+# ============================================
+# CONTACT FORM
+# ============================================
+@app.route('/api/contact', methods=['POST'])
+@limiter.limit("3 per hour")
+def contact_form():
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        data = request.json
+        for field in ['name', 'email', 'subject', 'message']:
+            if not data.get(field): return error_response(f"{field} is required", 400)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO contact_messages (name, email, subject, message, ip_address, user_agent) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            (data['name'], data['email'], data['subject'], data['message'], request.remote_addr, request.headers.get('User-Agent', '')))
+        msg_id = cur.fetchone()[0]
+        conn.commit()
+        return success_response(data={"id": safe_str(msg_id)}, message="Message sent", status_code=201)
+    except Exception as e:
+        if conn: conn.rollback()
+        return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
+
+# ============================================
+# ADMIN USER MANAGEMENT
+# ============================================
+@app.route('/api/admin/user/<user_id>', methods=['GET', 'PUT', 'DELETE'])
+@require_admin
+def admin_manage_user(user_id):
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        if request.method == 'GET':
+            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+            user = cur.fetchone()
+            if not user: return error_response("User not found", 404)
+            columns = [desc[0] for desc in cur.description]
+            return success_response(data={"user": {col: safe_str(user[i]) for i, col in enumerate(columns)}})
+        elif request.method == 'PUT':
+            data = request.json
+            cur.execute("UPDATE users SET full_name = COALESCE(%s, full_name), email = COALESCE(%s, email), phone = COALESCE(%s, phone), is_verified = COALESCE(%s, is_verified), verification_status = COALESCE(%s, verification_status), updated_at = NOW() WHERE id = %s",
+                (data.get('full_name'), data.get('email'), data.get('phone'), data.get('is_verified'), data.get('verification_status'), user_id))
+            conn.commit()
+            return success_response(message="User updated")
+        elif request.method == 'DELETE':
+            cur.execute("UPDATE users SET verification_status = 'deactivated', updated_at = NOW() WHERE id = %s", (user_id,))
+            conn.commit()
+            return success_response(message="User deactivated")
+    except Exception as e:
+        if conn: conn.rollback()
+        return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
+
+@app.route('/api/admin/user/<user_id>/toggle-status', methods=['POST'])
+@require_admin
+def admin_toggle_user_status(user_id):
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET verification_status = CASE WHEN verification_status = 'blocked' THEN 'verified' ELSE 'blocked' END, updated_at = NOW() WHERE id = %s RETURNING verification_status", (user_id,))
+        result = cur.fetchone()
+        if not result: return error_response("User not found", 404)
+        conn.commit()
+        return success_response(data={"new_status": result[0]}, message=f"Status changed to {result[0]}")
+    except Exception as e:
+        if conn: conn.rollback()
+        return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
+
+@app.route('/api/admin/user/<user_id>/reset-password', methods=['POST'])
+@require_admin
+@limiter.limit("10 per hour")
+def admin_reset_password(user_id):
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        data = request.json
+        new_password = data.get('new_password')
+        if not new_password or len(new_password) < 6: return error_response("Password must be at least 6 characters", 400)
+        cur = conn.cursor()
+        new_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        cur.execute("UPDATE users SET password_hash = %s, updated_at = NOW() WHERE id = %s", (new_hash, user_id))
+        conn.commit()
+        return success_response(message="Password reset successfully")
+    except Exception as e:
+        if conn: conn.rollback()
+        return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
+
+# ============================================
+# ADMIN LOGS
+# ============================================
+@app.route('/api/admin/access-logs', methods=['GET'])
+@require_admin
+def admin_get_access_logs():
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM access_logs ORDER BY created_at DESC LIMIT 100")
+        columns = [desc[0] for desc in cur.description]
+        logs = [{col: safe_str(row[i]) for i, col in enumerate(columns)} for row in cur.fetchall()]
+        return success_response(data={"logs": logs})
+    except Exception as e: return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
+
+@app.route('/api/admin/activity-logs', methods=['GET'])
+@require_admin
+def admin_get_activity_logs():
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 100")
+        columns = [desc[0] for desc in cur.description]
+        logs = [{col: safe_str(row[i]) for i, col in enumerate(columns)} for row in cur.fetchall()]
+        return success_response(data={"logs": logs})
+    except Exception as e: return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
+
+@app.route('/api/admin/audit-logs', methods=['GET'])
+@require_admin
+def admin_get_audit_logs():
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100")
+        columns = [desc[0] for desc in cur.description]
+        logs = [{col: safe_str(row[i]) for i, col in enumerate(columns)} for row in cur.fetchall()]
+        return success_response(data={"logs": logs})
+    except Exception as e: return error_response(str(e), 400)
+    finally: cur.close(); conn.close()
 # ============================================
 # ERROR HANDLERS
 # ============================================
