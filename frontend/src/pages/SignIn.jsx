@@ -9,7 +9,6 @@ function SignIn() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [serverStatus, setServerStatus] = useState('checking');
 
   // Check if user is already logged in
   useEffect(() => {
@@ -28,26 +27,6 @@ function SignIn() {
     }
   }, [navigate]);
 
-  // Check server status
-  useEffect(() => {
-    const checkServer = async () => {
-      try {
-        const res = await fetch('https://jobconnect-api-gjtw.onrender.com/', { 
-          method: 'GET',
-          signal: AbortSignal.timeout(10000)
-        });
-        if (res.ok) {
-          setServerStatus('online');
-        } else {
-          setServerStatus('offline');
-        }
-      } catch {
-        setServerStatus('offline');
-      }
-    };
-    checkServer();
-  }, []);
-
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
@@ -57,7 +36,6 @@ function SignIn() {
     e.preventDefault();
     setError('');
 
-    // Validation
     if (!formData.email.trim()) {
       setError('Please enter your email address');
       return;
@@ -72,19 +50,15 @@ function SignIn() {
     }
 
     setLoading(true);
-    setError('⏳ Connecting to server... Please wait up to 60 seconds.');
 
     try {
-      const API_URL = 'https://jobconnect-api-gjtw.onrender.com';
-      
-      const res = await fetch(`${API_URL}/api/auth/login`, {
+      const res = await fetch('https://jobconnect-api-gjtw.onrender.com/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           email: formData.email.trim(), 
           password: formData.password 
-        }),
-        signal: AbortSignal.timeout(60000)
+        })
       });
 
       const data = await res.json();
@@ -123,14 +97,7 @@ function SignIn() {
       }
     } catch (err) {
       console.error('❌ Login error:', err);
-      
-      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
-        setError('⏰ Server is waking up (free tier). Please wait 30 seconds and try again.');
-      } else if (err.message === 'Failed to fetch' || err.message.includes('NetworkError')) {
-        setError('📡 Unable to connect. Please check your internet and try again.');
-      } else {
-        setError('❌ Connection error. Please try again.');
-      }
+      setError('Connection failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -139,21 +106,12 @@ function SignIn() {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        {/* Left Side */}
         <div className="auth-left">
           <div className="auth-image">👋</div>
           <h2>Welcome Back!</h2>
           <p>Sign in to your account to access verified jobs and manage your applications.</p>
-          
-          <div className={`server-status ${serverStatus}`}>
-            <span className="status-dot"></span>
-            {serverStatus === 'online' && 'Server Online'}
-            {serverStatus === 'offline' && 'Server Starting... (Free Tier)'}
-            {serverStatus === 'checking' && 'Checking Server...'}
-          </div>
         </div>
 
-        {/* Right Side */}
         <div className="auth-right">
           <h2>Sign In</h2>
           <p className="subtitle">Access your JobConnect account</p>
@@ -219,14 +177,7 @@ function SignIn() {
             </div>
 
             <button type="submit" className="auth-btn" disabled={loading}>
-              {loading ? (
-                <>
-                  <span className="spinner-small"></span>
-                  Signing In...
-                </>
-              ) : (
-                'Sign In'
-              )}
+              {loading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
 
