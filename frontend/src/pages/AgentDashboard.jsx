@@ -97,7 +97,7 @@ function AgentDashboard() {
   // INITIALIZATION
   // ============================================
   useEffect(() => {
-    const userData = localStorage.getItem('user');
+   const userData = localStorage.getItem('user') || sessionStorage.getItem('user');
     if (!userData) { 
       navigate('/signin'); 
       return; 
