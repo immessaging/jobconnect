@@ -86,6 +86,14 @@ function AdminDashboard() {
   });
 
   // ============================================
+  // HELPER: Unwrap nested API responses
+  // ============================================
+  // Backend returns: { data: { users: [...] }, success: true }
+  // Some endpoints return: { users: [...] }  (flat)
+  // This handles both shapes.
+  const unwrap = (res) => res?.data?.data || res?.data || {};
+
+  // ============================================
   // DATA FETCHING
   // ============================================
   useEffect(() => {
@@ -137,16 +145,16 @@ function AdminDashboard() {
       
       console.log('✅ Data fetched successfully');
       
-      setUsers(testRes.data?.users || []);
-      setJobs(jobsRes.data?.jobs || []);
-      setAnnouncements(announcementsRes.data?.announcements || []);
-      setAnalytics(analyticsRes.data?.stats || {});
-      setAllUsers(usersListRes.data?.users || []);
-      setTestimonials(testimonialsRes.data?.testimonials || []);
-      setPendingUsers(verificationsRes.data?.users || []);
-      setAccessLogs(accessLogsRes.data?.logs || []);
-      setActivityLogs(activityLogsRes.data?.logs || []);
-      setAuditLogs(auditLogsRes.data?.logs || []);
+      setUsers(unwrap(testRes).users || []);
+      setJobs(unwrap(jobsRes).jobs || []);
+      setAnnouncements(unwrap(announcementsRes).announcements || []);
+      setAnalytics(unwrap(analyticsRes).stats || {});
+      setAllUsers(unwrap(usersListRes).users || []);
+      setTestimonials(unwrap(testimonialsRes).testimonials || []);
+      setPendingUsers(unwrap(verificationsRes).users || []);
+      setAccessLogs(unwrap(accessLogsRes).logs || []);
+      setActivityLogs(unwrap(activityLogsRes).logs || []);
+      setAuditLogs(unwrap(auditLogsRes).logs || []);
       
     } catch (error) {
       console.error('❌ Dashboard data fetch failed:', error);
@@ -161,6 +169,7 @@ function AdminDashboard() {
   // ============================================
   const handleLogout = () => { 
     localStorage.removeItem('user'); 
+    sessionStorage.removeItem('user'); 
     navigate('/signin'); 
   };
 
@@ -214,6 +223,10 @@ function AdminDashboard() {
   };
 
   const handleExportCSV = (data, filename) => {
+    if (!data || data.length === 0) {
+      alert('No data to export');
+      return;
+    }
     const csv = Object.keys(data[0]).join(',') + '\n' + data.map(row => Object.values(row).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' }); 
     const a = document.createElement('a'); 
@@ -236,7 +249,7 @@ function AdminDashboard() {
   const loadVerifications = async () => {
     try {
       const res = await getVerifications();
-      setPendingUsers(res.data?.users || []);
+      setPendingUsers(unwrap(res).users || []);
     } catch (error) {
       console.error('❌ Verifications fetch failed:', error);
     }
@@ -1007,7 +1020,7 @@ function AdminDashboard() {
                   onClick={handlePostAnnouncement}>📢 Post</button>
               </div>
             )}
-            {noticeBoard.map(n => (
+            {announcements.map(n => (
               <div key={n.id} style={{borderLeft:'4px solid '+(n.priority==='urgent'?'#dc3545':n.priority==='high'?'#ffc107':'#d4a843'),
                 padding:'15px',marginBottom:'12px',background:n.priority==='urgent'?'#fff5f5':'white',borderRadius:'8px'}}>
                 <div style={{display:'flex',justifyContent:'space-between'}}>
@@ -1015,7 +1028,7 @@ function AdminDashboard() {
                   <span className={`badge ${n.priority==='urgent'?'badge-pending':n.priority==='high'?'badge-gold':'badge-verified'}`}>{n.priority}</span>
                 </div>
                 <p className="text-muted">{n.content}</p>
-                <small>Audience: {n.audience} | {n.date}</small>
+                <small>Audience: {n.audience} | {new Date(n.date).toLocaleDateString()}</small>
               </div>
             ))}
           </div>
