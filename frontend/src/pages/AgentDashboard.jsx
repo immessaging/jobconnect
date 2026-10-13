@@ -16,30 +16,31 @@ function AgentDashboard() {
   const [locationDisplay, setLocationDisplay] = useState('Waiting for GPS location...');
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
-   const [form, setForm] = useState({ 
-  agent_id: '',
-  job_title: '',
-  qualification_requirements: '', 
-  experience_requirements: '', 
-  required_skills: '',
-  salary_range_min: '', 
-  salary_range_max: '',
-  salary_type: 'monthly',
-  organization_name: '',
-  organization_contact_person: '',
-  organization_email: '',
-  organization_phone: '',
-  commission_percentage: 25, 
-  is_negotiable: true, 
-  has_exam: false, 
-  has_interview: false
-});
+
+  const [form, setForm] = useState({
+    agent_id: '',
+    job_title: '',
+    qualification_requirements: '',
+    experience_requirements: '',
+    required_skills: '',
+    salary_range_min: '',
+    salary_range_max: '',
+    salary_type: 'monthly',
+    organization_name: '',
+    organization_contact_person: '',
+    organization_email: '',
+    organization_phone: '',
+    commission_percentage: 25,
+    is_negotiable: true,
+    has_exam: false,
+    has_interview: false
+  });
+
   const isVerified = user?.is_verified || false;
 
   const [passwordForm, setPasswordForm] = useState({ current: '', newPass: '', confirm: '' });
   const [passwordMsg, setPasswordMsg] = useState('');
 
-  // FIXED: Added agentMessages state
   const [agentMessages, setAgentMessages] = useState([]);
 
   const [verifyForm, setVerifyForm] = useState({
@@ -55,14 +56,14 @@ function AgentDashboard() {
 
   const [commissionPercent, setCommissionPercent] = useState(15);
   const [isNegotiable, setIsNegotiable] = useState(true);
-  
+
   const [earnings, setEarnings] = useState([]);
   const [totalEarned, setTotalEarned] = useState(0);
   const [nextPayout, setNextPayout] = useState('');
 
   const [agentDisputes, setAgentDisputes] = useState([]);
   const [applications, setApplications] = useState([]);
-  
+
   const [agentChatMessages, setAgentChatMessages] = useState([]);
   const [agentChatInput, setAgentChatInput] = useState('');
   const [selectedChatContact, setSelectedChatContact] = useState('');
@@ -75,57 +76,41 @@ function AgentDashboard() {
   const [profileData, setProfileData] = useState(null);
 
   // ============================================
-  // FETCH AGENT PROFILE ID
+  // HELPER: Unwrap nested API responses
   // ============================================
-  const fetchAgentProfileId = async (userId) => {
-    try {
-      const API = 'https://jobconnect-api-gjtw.onrender.com';
-      const response = await fetch(`${API}/api/agent/profile/${userId}`);
-      const data = await response.json();
-      if (data.success && data.profile_id) {
-        setAgentProfileId(data.profile_id);
-        setForm(prev => ({ ...prev, agent_id: data.profile_id }));
-        return data.profile_id;
-      }
-    } catch (err) {
-      console.log('Error fetching agent profile:', err);
-    }
-    return null;
-  };
+  const unwrap = (res) => res?.data?.data || res?.data || {};
 
   // ============================================
   // INITIALIZATION
   // ============================================
   useEffect(() => {
-   const userData = localStorage.getItem('user') || sessionStorage.getItem('user');
-    if (!userData) { 
-      navigate('/signin'); 
-      return; 
+    const userData = localStorage.getItem('user') || sessionStorage.getItem('user');
+    if (!userData) {
+      navigate('/signin');
+      return;
     }
-    
+
     const parsedUser = JSON.parse(userData);
     setUser(parsedUser);
-    
-    // Load all data
+
+    // Use user.id as the agent_id (backend expects users.id for job_listings.agent_id)
+    setAgentProfileId(parsedUser.id);
+    setForm(prev => ({ ...prev, agent_id: parsedUser.id }));
+
     const initDashboard = async () => {
       setLoading(true);
       try {
-        // Fetch agent profile
-        const profileId = await fetchAgentProfileId(parsedUser.id);
-        if (profileId) {
-          await loadJobs(profileId);
-        }
-        
-        // Fetch user profile
+        await loadJobs(parsedUser.id);
+
         if (parsedUser.id) {
           try {
             const profileRes = await getUserProfile(parsedUser.id);
-            setProfileData(profileRes.data?.profile || null);
+            setProfileData(unwrap(profileRes).profile || null);
           } catch (err) {
             console.log('Profile fetch error:', err);
           }
         }
-        
+
         loadEarnings();
         calculateNextPayout();
       } catch (error) {
@@ -134,20 +119,20 @@ function AgentDashboard() {
         setLoading(false);
       }
     };
-    
+
     initDashboard();
     setTimeout(() => requestLocationAccess(), 1000);
   }, []);
 
   // ============================================
-  // DATA LOADING FUNCTIONS
+  // DATA LOADING
   // ============================================
   const loadJobs = async (profileId) => {
     const id = profileId || agentProfileId;
     if (!id) return;
     try {
       const res = await getAgentJobs(id);
-      setJobs(res.data?.jobs || []);
+      setJobs(unwrap(res).jobs || []);
     } catch (error) {
       console.log('Error loading jobs:', error);
     }
@@ -155,7 +140,7 @@ function AgentDashboard() {
 
   const loadEarnings = () => {
     const saved = JSON.parse(localStorage.getItem('agentEarnings') || '[]');
-    setEarnings(saved); 
+    setEarnings(saved);
     setTotalEarned(saved.reduce((s, e) => s + (e.amount || 0), 0));
   };
 
@@ -163,21 +148,22 @@ function AgentDashboard() {
     const now = new Date();
     let payout = new Date(now.getFullYear(), now.getMonth(), 25);
     if (now > payout) payout = new Date(now.getFullYear(), now.getMonth() + 1, 25);
-    setNextPayout(payout.toLocaleDateString('en-NG', { weekday:'long', year:'numeric', month:'long', day:'numeric' }));
+    setNextPayout(payout.toLocaleDateString('en-NG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
   };
 
   // ============================================
   // HANDLERS
   // ============================================
-  const handleLogout = () => { 
-    localStorage.removeItem('user'); 
-    navigate('/signin'); 
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    sessionStorage.removeItem('user');
+    navigate('/signin');
   };
-  
+
   const formatNaira = (num) => '₦' + Number(num).toLocaleString();
 
   const handleVerifySubmit = async () => {
-    setVerifyLoading(true); 
+    setVerifyLoading(true);
     setVerifyMsg('');
     try {
       let passportUrl = '', photoUrl = '';
@@ -189,62 +175,57 @@ function AgentDashboard() {
         passport_photo: passportUrl, government_id_photo: photoUrl, ...verifyForm
       });
       setVerifyMsg('✅ Verification submitted! Review takes 24-48 hours.');
-    } catch { 
-      setVerifyMsg('❌ Failed to submit.'); 
+    } catch {
+      setVerifyMsg('❌ Failed to submit.');
     }
     setVerifyLoading(false);
   };
 
   const handlePost = async (e) => {
-  e.preventDefault(); 
-  setMsg('');
-  
-  // Validate required fields
-  if (!form.job_title || !form.organization_name || !form.qualification_requirements || 
-      !form.experience_requirements || !form.salary_range_min || !form.salary_range_max) {
-    setMsg('❌ Please fill all required fields');
-    return;
-  }
-  
-  // Check agent profile
-  if (!agentProfileId) { 
-    setMsg('❌ Agent profile not found. Please complete verification first.'); 
-    return; 
-  }
-  
-  try {
-    await postJob({ 
-      ...form, 
-      agent_id: agentProfileId, 
-      commission_percentage: commissionPercent, 
-      is_negotiable: isNegotiable 
-    });
-    
-    setMsg('✅ Job posted! Commission: ' + commissionPercent + '% ' + (isNegotiable ? '(Negotiable)' : '(Fixed)'));
-    
-    // Reload jobs
-    loadJobs(agentProfileId);
-    
-    // Reset form
-    setForm({
-      ...form,
-      job_title: '',
-      qualification_requirements: '',
-      experience_requirements: '',
-      required_skills: '',
-      salary_range_min: '',
-      salary_range_max: '',
-      organization_name: '',
-      organization_contact_person: '',
-      organization_email: '',
-      organization_phone: ''
-    });
-    
-  } catch (error) { 
-    console.error('❌ Post job error:', error);
-    setMsg('❌ Failed to post job. Please try again.'); 
-  }
-};
+    e.preventDefault();
+    setMsg('');
+
+    if (!form.job_title || !form.organization_name || !form.qualification_requirements ||
+        !form.experience_requirements || !form.salary_range_min || !form.salary_range_max) {
+      setMsg('❌ Please fill all required fields');
+      return;
+    }
+
+    if (!agentProfileId) {
+      setMsg('❌ User not logged in properly. Please sign in again.');
+      return;
+    }
+
+    try {
+      await postJob({
+        ...form,
+        agent_id: agentProfileId,
+        commission_percentage: commissionPercent,
+        is_negotiable: isNegotiable
+      });
+
+      setMsg('✅ Job posted! Commission: ' + commissionPercent + '% ' + (isNegotiable ? '(Negotiable)' : '(Fixed)'));
+
+      loadJobs(agentProfileId);
+
+      setForm({
+        ...form,
+        job_title: '',
+        qualification_requirements: '',
+        experience_requirements: '',
+        required_skills: '',
+        salary_range_min: '',
+        salary_range_max: '',
+        organization_name: '',
+        organization_contact_person: '',
+        organization_email: '',
+        organization_phone: ''
+      });
+    } catch (error) {
+      console.error('❌ Post job error:', error);
+      setMsg('❌ Failed to post job. Please try again.');
+    }
+  };
 
   const requestLocationAccess = () => {
     if (!navigator.geolocation) {
@@ -252,42 +233,42 @@ function AgentDashboard() {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => { 
-        setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); 
-        setLocationDisplay(`GPS: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`); 
-        setShowLocationOverlay(false); 
+      (pos) => {
+        setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocationDisplay(`GPS: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+        setShowLocationOverlay(false);
       },
-      () => setShowLocationOverlay(false), 
+      () => setShowLocationOverlay(false),
       { enableHighAccuracy: true, timeout: 20000 }
     );
   };
 
   const handlePasswordChange = () => {
     setPasswordMsg('');
-    if (!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm) { 
-      setPasswordMsg('❌ All fields required'); 
-      return; 
+    if (!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm) {
+      setPasswordMsg('❌ All fields required');
+      return;
     }
-    if (passwordForm.newPass.length < 6) { 
-      setPasswordMsg('❌ Min 6 characters'); 
-      return; 
+    if (passwordForm.newPass.length < 6) {
+      setPasswordMsg('❌ Min 6 characters');
+      return;
     }
-    if (passwordForm.newPass !== passwordForm.confirm) { 
-      setPasswordMsg('❌ Passwords do not match'); 
-      return; 
+    if (passwordForm.newPass !== passwordForm.confirm) {
+      setPasswordMsg('❌ Passwords do not match');
+      return;
     }
-    setPasswordMsg('✅ Password changed!'); 
+    setPasswordMsg('✅ Password changed!');
     setPasswordForm({ current: '', newPass: '', confirm: '' });
   };
 
   const handleAgentSendChat = () => {
     if (!agentChatInput.trim()) return;
-    setAgentChatMessages([...agentChatMessages, { 
-      id: Date.now(), 
-      sender: 'agent', 
-      text: agentChatInput, 
-      time: new Date().toLocaleTimeString(), 
-      isAgent: true 
+    setAgentChatMessages([...agentChatMessages, {
+      id: Date.now(),
+      sender: 'agent',
+      text: agentChatInput,
+      time: new Date().toLocaleTimeString(),
+      isAgent: true
     }]);
     setAgentChatInput('');
   };
@@ -298,9 +279,9 @@ function AgentDashboard() {
   };
 
   const handleStartCall = () => {
-    if (!agentCallTarget) { 
-      alert('Select a user to call'); 
-      return; 
+    if (!agentCallTarget) {
+      alert('Select a user to call');
+      return;
     }
     setShowAgentCall(true);
     const roomUrl = `https://meet.jit.si/JobConnect-Agent-${Date.now()}`;
@@ -311,26 +292,19 @@ function AgentDashboard() {
   // ============================================
   // COMPUTED STATS
   // ============================================
-  const stats = { 
-    activeListings: jobs.filter(j => j.status === 'active').length, 
-    filledJobs: jobs.filter(j => j.status === 'filled').length, 
-    totalApplications: jobs.reduce((s, j) => s + (j.applications || 0), 0), 
-    totalCommissionEarned: totalEarned 
+  const stats = {
+    activeListings: jobs.filter(j => j.status === 'active').length,
+    filledJobs: jobs.filter(j => j.status === 'filled').length,
+    totalApplications: jobs.reduce((s, j) => s + (j.applications || 0), 0),
+    totalCommissionEarned: totalEarned
   };
 
   // ============================================
-  // LOADING STATE
+  // LOADING
   // ============================================
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        background: '#0a1628',
-        color: '#d4a843'
-      }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#0a1628', color: '#d4a843' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⏳</div>
           <h2>Loading Dashboard...</h2>
@@ -339,12 +313,8 @@ function AgentDashboard() {
     );
   }
 
-  // ============================================
-  // MAIN RENDER
-  // ============================================
   return (
     <div className="dashboard">
-      {/* GPS LOCATION OVERLAY */}
       {showLocationOverlay && (
         <div className="location-overlay">
           <div className="location-modal">
@@ -357,7 +327,6 @@ function AgentDashboard() {
         </div>
       )}
 
-      {/* SIDEBAR */}
       <div className={`dashboard-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
           <div className="user-avatar">🤝</div>
@@ -421,9 +390,7 @@ function AgentDashboard() {
         </nav>
       </div>
 
-      {/* MAIN CONTENT */}
       <div className={`dashboard-main ${sidebarCollapsed ? 'expanded' : ''}`}>
-        {/* TOP BAR */}
         <div className="dash-topbar">
           <div>
             <button className="toggle-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>☰</button>
@@ -433,11 +400,9 @@ function AgentDashboard() {
             <button className="logout-btn-header" onClick={handleLogout}>🚪 Logout</button>
           </div>
         </div>
-        
-        {/* GPS INFO */}
+
         {gpsCoords && <div className="geo-info">📍 {locationDisplay}</div>}
-        
-        {/* VERIFICATION WARNING */}
+
         {!isVerified && (
           <div className="verification-warning">
             <h3>⚠️ NOT VERIFIED</h3>
@@ -447,26 +412,13 @@ function AgentDashboard() {
             </button>
           </div>
         )}
-        
-        {/* AGENT PROFILE WARNING */}
-        {!agentProfileId && user?.user_type === 'agent' && (
-          <div className="verification-warning">
-            <h3>⚠️ AGENT PROFILE NOT FOUND</h3>
-            <p>Please complete verification to create your agent profile.</p>
-          </div>
-        )}
-        
-        {/* WELCOME CARD */}
+
         <div className="welcome-card">
           <div><h4>Welcome, {user?.email?.split('@')[0] || 'Agent'}!</h4></div>
         </div>
-        
-        {/* STATUS MESSAGE */}
+
         {msg && <div className={msg.includes('✅')?'success-message':'error-message'}>{msg}</div>}
 
-        {/* ============================================ */}
-        {/* DASHBOARD TAB */}
-        {/* ============================================ */}
         {activeTab==='dashboard' && (
           <div>
             <div className="stats-row">
@@ -481,9 +433,6 @@ function AgentDashboard() {
           </div>
         )}
 
-        {/* ============================================ */}
-        {/* MY JOBS TAB */}
-        {/* ============================================ */}
         {activeTab==='jobs' && (
           <div className="dash-card">
             <h3>My Jobs</h3>
@@ -505,290 +454,130 @@ function AgentDashboard() {
           </div>
         )}
 
-        {/* ============================================ */}
-{/* POST JOB TAB - WITH ORGANIZATION DETAILS */}
-{/* ============================================ */}
-{activeTab==='post' && (
-  <div className="dash-card form-card">
-    <h3>📢 Post New Job</h3>
-    <p className="text-muted">Fill in all required fields to post a new job listing</p>
-    
-    <form onSubmit={handlePost}>
-      {/* Job Title */}
-      <div className="form-group">
-        <label>Job Title *</label>
-        <input 
-          type="text"
-          placeholder="e.g., Senior Software Developer"
-          value={form.job_title} 
-          onChange={e => setForm({...form, job_title: e.target.value})} 
-          required
-        />
-      </div>
+        {activeTab==='post' && (
+          <div className="dash-card form-card">
+            <h3>📢 Post New Job</h3>
+            <p className="text-muted">Fill in all required fields to post a new job listing</p>
 
-      {/* Organization Details */}
-      <h4 style={{marginTop:'20px', color:'#0a1628', borderBottom:'2px solid #d4a843', paddingBottom:'8px'}}>
-        🏢 Organization Details
-      </h4>
-      
-      <div className="form-group">
-        <label>Organization Name *</label>
-        <input 
-          type="text"
-          placeholder="e.g., Tech Corp Nigeria"
-          value={form.organization_name} 
-          onChange={e => setForm({...form, organization_name: e.target.value})} 
-          required
-        />
-      </div>
+            <form onSubmit={handlePost}>
+              <div className="form-group">
+                <label>Job Title *</label>
+                <input type="text" placeholder="e.g., Senior Software Developer" value={form.job_title} onChange={e => setForm({...form, job_title: e.target.value})} required />
+              </div>
 
-      <div className="form-row">
-        <div className="form-group">
-          <label>Contact Person *</label>
-          <input 
-            type="text"
-            placeholder="e.g., HR Manager"
-            value={form.organization_contact_person} 
-            onChange={e => setForm({...form, organization_contact_person: e.target.value})} 
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Contact Phone</label>
-          <input 
-            type="tel"
-            placeholder="e.g., 08012345678"
-            value={form.organization_phone} 
-            onChange={e => setForm({...form, organization_phone: e.target.value})} 
-          />
-        </div>
-      </div>
+              <h4 style={{marginTop:'20px', color:'#0a1628', borderBottom:'2px solid #d4a843', paddingBottom:'8px'}}>🏢 Organization Details</h4>
 
-      <div className="form-group">
-        <label>Contact Email *</label>
-        <input 
-          type="email"
-          placeholder="e.g., hr@techcorp.ng"
-          value={form.organization_email} 
-          onChange={e => setForm({...form, organization_email: e.target.value})} 
-          required
-        />
-      </div>
+              <div className="form-group">
+                <label>Organization Name *</label>
+                <input type="text" placeholder="e.g., Tech Corp Nigeria" value={form.organization_name} onChange={e => setForm({...form, organization_name: e.target.value})} required />
+              </div>
 
-      {/* Job Requirements */}
-      <h4 style={{marginTop:'20px', color:'#0a1628', borderBottom:'2px solid #d4a843', paddingBottom:'8px'}}>
-        📋 Job Requirements
-      </h4>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Contact Person *</label>
+                  <input type="text" placeholder="e.g., HR Manager" value={form.organization_contact_person} onChange={e => setForm({...form, organization_contact_person: e.target.value})} required />
+                </div>
+                <div className="form-group">
+                  <label>Contact Phone</label>
+                  <input type="tel" placeholder="e.g., 08012345678" value={form.organization_phone} onChange={e => setForm({...form, organization_phone: e.target.value})} />
+                </div>
+              </div>
 
-      <div className="form-group">
-        <label>Qualification Requirements *</label>
-        <textarea 
-          rows="3"
-          placeholder="e.g., B.Sc. in Computer Science, 2-3 years experience"
-          value={form.qualification_requirements} 
-          onChange={e => setForm({...form, qualification_requirements: e.target.value})} 
-          required
-        />
-      </div>
+              <div className="form-group">
+                <label>Contact Email *</label>
+                <input type="email" placeholder="e.g., hr@techcorp.ng" value={form.organization_email} onChange={e => setForm({...form, organization_email: e.target.value})} required />
+              </div>
 
-      <div className="form-group">
-        <label>Experience Requirements *</label>
-        <textarea 
-          rows="3"
-          placeholder="e.g., Minimum 3 years in software development"
-          value={form.experience_requirements} 
-          onChange={e => setForm({...form, experience_requirements: e.target.value})} 
-          required
-        />
-      </div>
+              <h4 style={{marginTop:'20px', color:'#0a1628', borderBottom:'2px solid #d4a843', paddingBottom:'8px'}}>📋 Job Requirements</h4>
 
-      <div className="form-group">
-        <label>Required Skills</label>
-        <input 
-          type="text"
-          placeholder="e.g., React, Node.js, PostgreSQL"
-          value={form.required_skills} 
-          onChange={e => setForm({...form, required_skills: e.target.value})} 
-        />
-      </div>
+              <div className="form-group">
+                <label>Qualification Requirements *</label>
+                <textarea rows="3" placeholder="e.g., B.Sc. in Computer Science, 2-3 years experience" value={form.qualification_requirements} onChange={e => setForm({...form, qualification_requirements: e.target.value})} required />
+              </div>
 
-      {/* Salary Details */}
-      <h4 style={{marginTop:'20px', color:'#0a1628', borderBottom:'2px solid #d4a843', paddingBottom:'8px'}}>
-        💰 Salary Details
-      </h4>
+              <div className="form-group">
+                <label>Experience Requirements *</label>
+                <textarea rows="3" placeholder="e.g., Minimum 3 years in software development" value={form.experience_requirements} onChange={e => setForm({...form, experience_requirements: e.target.value})} required />
+              </div>
 
-      <div className="form-row">
-        <div className="form-group">
-          <label>Minimum Salary (₦) *</label>
-          <input 
-            type="number"
-            placeholder="e.g., 300000"
-            value={form.salary_range_min} 
-            onChange={e => setForm({...form, salary_range_min: e.target.value})}
-            min="0"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Maximum Salary (₦) *</label>
-          <input 
-            type="number"
-            placeholder="e.g., 500000"
-            value={form.salary_range_max} 
-            onChange={e => setForm({...form, salary_range_max: e.target.value})}
-            min="0"
-            required
-          />
-        </div>
-      </div>
+              <div className="form-group">
+                <label>Required Skills</label>
+                <input type="text" placeholder="e.g., React, Node.js, PostgreSQL" value={form.required_skills} onChange={e => setForm({...form, required_skills: e.target.value})} />
+              </div>
 
-      <div className="form-group">
-        <label>Salary Type</label>
-        <select 
-          value={form.salary_type || 'monthly'} 
-          onChange={e => setForm({...form, salary_type: e.target.value})}
-          style={{width:'100%', padding:'10px', borderRadius:'5px', border:'2px solid #e0e0e0'}}
-        >
-          <option value="monthly">Monthly</option>
-          <option value="yearly">Yearly</option>
-          <option value="hourly">Hourly</option>
-          <option value="weekly">Weekly</option>
-        </select>
-      </div>
+              <h4 style={{marginTop:'20px', color:'#0a1628', borderBottom:'2px solid #d4a843', paddingBottom:'8px'}}>💰 Salary Details</h4>
 
-     {/* Commission Settings */}
-<h4 style={{marginTop:'20px', color:'#0a1628', borderBottom:'2px solid #d4a843', paddingBottom:'8px'}}>
-  💎 Commission Settings
-</h4>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Minimum Salary (₦) *</label>
+                  <input type="number" placeholder="e.g., 300000" value={form.salary_range_min} onChange={e => setForm({...form, salary_range_min: e.target.value})} min="0" required />
+                </div>
+                <div className="form-group">
+                  <label>Maximum Salary (₦) *</label>
+                  <input type="number" placeholder="e.g., 500000" value={form.salary_range_max} onChange={e => setForm({...form, salary_range_max: e.target.value})} min="0" required />
+                </div>
+              </div>
 
-<div className="commission-setting-card" style={{
-  background: '#f8f9fa',
-  padding: '20px',
-  borderRadius: '8px',
-  border: '1px solid #e0e0e0',
-  marginBottom: '20px'
-}}>
-  <div className="form-group">
-    <label>Commission Percentage (5-35%) *</label>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      <input 
-        type="range"
-        min="5"
-        max="35"
-        value={commissionPercent} 
-        onChange={e => setCommissionPercent(Number(e.target.value))}
-        style={{ flex: 1 }}
-      />
-      <span style={{
-        fontSize: '18px',
-        fontWeight: 'bold',
-        color: '#0a1628',
-        minWidth: '50px',
-        textAlign: 'center',
-        background: '#d4a843',
-        color: '#fff',
-        padding: '5px 10px',
-        borderRadius: '5px'
-      }}>
-        {commissionPercent}%
-      </span>
-    </div>
-    <small style={{color:'#666', display:'block', marginTop:'5px'}}>
-      Estimated commission: ₦{((Number(form.salary_range_max) * commissionPercent) / 100).toLocaleString()}
-    </small>
-    <p style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>
-      ⚠️ You can set any commission between 5% and 35% of the first month's salary
-    </p>
-  </div>
+              <div className="form-group">
+                <label>Salary Type</label>
+                <select value={form.salary_type || 'monthly'} onChange={e => setForm({...form, salary_type: e.target.value})} style={{width:'100%', padding:'10px', borderRadius:'5px', border:'2px solid #e0e0e0'}}>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                  <option value="hourly">Hourly</option>
+                  <option value="weekly">Weekly</option>
+                </select>
+              </div>
 
-  <div style={{marginTop:'15px'}}>
-    <label style={{display:'block', marginBottom:'10px', fontWeight:'bold'}}>Commission Type</label>
-    <label style={{marginRight:'20px', cursor:'pointer'}}>
-      <input 
-        type="radio" 
-        checked={isNegotiable} 
-        onChange={() => setIsNegotiable(true)} 
-        style={{marginRight:'5px'}}
-      />
-      🔄 Negotiable (Job seeker can negotiate the percentage)
-    </label>
-    <br/>
-    <label style={{cursor:'pointer', marginTop:'8px', display:'inline-block'}}>
-      <input 
-        type="radio" 
-        checked={!isNegotiable} 
-        onChange={() => setIsNegotiable(false)} 
-        style={{marginRight:'5px'}}
-      />
-      🔒 Fixed (Commission is non-negotiable)
-    </label>
-  </div>
-</div>
+              <h4 style={{marginTop:'20px', color:'#0a1628', borderBottom:'2px solid #d4a843', paddingBottom:'8px'}}>💎 Commission Settings</h4>
 
-      {/* Additional Options */}
-      <h4 style={{marginTop:'20px', color:'#0a1628', borderBottom:'2px solid #d4a843', paddingBottom:'8px'}}>
-        ⚙️ Additional Options
-      </h4>
+              <div className="commission-setting-card" style={{background: '#f8f9fa', padding: '20px', borderRadius: '8px', border: '1px solid #e0e0e0', marginBottom: '20px'}}>
+                <div className="form-group">
+                  <label>Commission Percentage (5-35%) *</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <input type="range" min="5" max="35" value={commissionPercent} onChange={e => setCommissionPercent(Number(e.target.value))} style={{ flex: 1 }} />
+                    <span style={{fontSize: '18px', fontWeight: 'bold', color: '#0a1628', minWidth: '50px', textAlign: 'center', background: '#d4a843', color: '#fff', padding: '5px 10px', borderRadius: '5px'}}>
+                      {commissionPercent}%
+                    </span>
+                  </div>
+                  <small style={{color:'#666', display:'block', marginTop:'5px'}}>
+                    Estimated commission: ₦{((Number(form.salary_range_max) * commissionPercent) / 100).toLocaleString()}
+                  </small>
+                </div>
 
-      <div className="form-row" style={{marginBottom:'20px'}}>
-        <label style={{cursor:'pointer', marginRight:'20px'}}>
-          <input 
-            type="checkbox"
-            checked={form.has_interview} 
-            onChange={e => setForm({...form, has_interview: e.target.checked})} 
-            style={{marginRight:'5px'}}
-          />
-          🎯 Has Interview
-        </label>
-        <label style={{cursor:'pointer'}}>
-          <input 
-            type="checkbox"
-            checked={form.has_exam} 
-            onChange={e => setForm({...form, has_exam: e.target.checked})} 
-            style={{marginRight:'5px'}}
-          />
-          📝 Has Exam
-        </label>
-      </div>
+                <div style={{marginTop:'15px'}}>
+                  <label style={{display:'block', marginBottom:'10px', fontWeight:'bold'}}>Commission Type</label>
+                  <label style={{marginRight:'20px', cursor:'pointer'}}>
+                    <input type="radio" checked={isNegotiable} onChange={() => setIsNegotiable(true)} style={{marginRight:'5px'}} />
+                    🔄 Negotiable
+                  </label>
+                  <br/>
+                  <label style={{cursor:'pointer', marginTop:'8px', display:'inline-block'}}>
+                    <input type="radio" checked={!isNegotiable} onChange={() => setIsNegotiable(false)} style={{marginRight:'5px'}} />
+                    🔒 Fixed
+                  </label>
+                </div>
+              </div>
 
-      {/* Submit Button */}
-      <button 
-        type="submit" 
-        className="btn-gold"
-        style={{
-          width:'100%',
-          padding:'15px',
-          fontSize:'16px',
-          fontWeight:'bold',
-          marginTop:'20px'
-        }}
-      >
-        📢 Post Job ({commissionPercent}% Commission)
-      </button>
+              <h4 style={{marginTop:'20px', color:'#0a1628', borderBottom:'2px solid #d4a843', paddingBottom:'8px'}}>⚙️ Additional Options</h4>
 
-      {/* Preview Card */}
-      {form.job_title && form.organization_name && (
-        <div style={{
-          marginTop:'20px',
-          padding:'20px',
-          background:'#f0f7ff',
-          borderRadius:'8px',
-          border:'2px solid #b8daff'
-        }}>
-          <h4 style={{color:'#0a1628', marginBottom:'10px'}}>📋 Job Preview</h4>
-          <p><strong>Title:</strong> {form.job_title}</p>
-          <p><strong>Organization:</strong> {form.organization_name}</p>
-          <p><strong>Salary:</strong> ₦{Number(form.salary_range_min).toLocaleString()} - ₦{Number(form.salary_range_max).toLocaleString()}</p>
-          <p><strong>Commission:</strong> {commissionPercent}% ({isNegotiable ? 'Negotiable' : 'Fixed'})</p>
-          <p><strong>Contact:</strong> {form.organization_contact_person} | {form.organization_email} | {form.organization_phone}</p>
-        </div>
-      )}
-    </form>
-  </div>
-)}
-        {/* ============================================ */}
-        {/* VERIFICATION TAB */}
-        {/* ============================================ */}
+              <div className="form-row" style={{marginBottom:'20px'}}>
+                <label style={{cursor:'pointer', marginRight:'20px'}}>
+                  <input type="checkbox" checked={form.has_interview} onChange={e => setForm({...form, has_interview: e.target.checked})} style={{marginRight:'5px'}} />
+                  🎯 Has Interview
+                </label>
+                <label style={{cursor:'pointer'}}>
+                  <input type="checkbox" checked={form.has_exam} onChange={e => setForm({...form, has_exam: e.target.checked})} style={{marginRight:'5px'}} />
+                  📝 Has Exam
+                </label>
+              </div>
+
+              <button type="submit" className="btn-gold" style={{width:'100%', padding:'15px', fontSize:'16px', fontWeight:'bold', marginTop:'20px'}}>
+                📢 Post Job ({commissionPercent}% Commission)
+              </button>
+            </form>
+          </div>
+        )}
+
         {activeTab==='verification' && (
           <div className="dash-card form-card">
             <h3>🛡️ Agent Verification</h3>
@@ -824,9 +613,6 @@ function AgentDashboard() {
           </div>
         )}
 
-        {/* ============================================ */}
-        {/* PROFILE TAB */}
-        {/* ============================================ */}
         {activeTab==='profile' && (
           <div className="dash-card form-card">
             <h3>👤 My Profile</h3>
@@ -837,15 +623,12 @@ function AgentDashboard() {
                 <div className="form-group"><label>Phone Number</label><input type="tel" value={profileData.phone || 'Not set'} readOnly /></div>
                 <div className="form-group"><label>Date of Birth</label><input type="text" value={profileData.date_of_birth || 'Not set'} readOnly /></div>
                 <div className="form-group"><label>Address</label><input type="text" value={profileData.address || 'Not set'} readOnly /></div>
-                <div className="form-group"><label>City</label><input type="text" value={profileData.city || 'Not set'} readOnly /></div>
-                <div className="form-group"><label>State</label><input type="text" value={profileData.state || 'Not set'} readOnly /></div>
                 <div className="form-group"><label>NIN</label><input type="text" value={profileData.nin || 'Not set'} readOnly /></div>
                 <div className="form-group"><label>BVN</label><input type="text" value={profileData.bvn || 'Not set'} readOnly /></div>
                 <div className="form-group"><label>Bank Name</label><input type="text" value={profileData.bank_name || 'Not set'} readOnly /></div>
                 <div className="form-group"><label>Account Number</label><input type="text" value={profileData.account_number || 'Not set'} readOnly /></div>
                 <div className="form-group"><label>Verification Status</label>
-                  <input type="text" value={profileData.verification_status || 'pending'} readOnly 
-                    style={{color: profileData.is_verified ? '#28a745' : '#dc3545', fontWeight: 'bold'}} />
+                  <input type="text" value={profileData.verification_status || 'pending'} readOnly style={{color: profileData.is_verified ? '#28a745' : '#dc3545', fontWeight: 'bold'}} />
                 </div>
               </>
             ) : (
@@ -854,9 +637,6 @@ function AgentDashboard() {
           </div>
         )}
 
-        {/* ============================================ */}
-        {/* PASSWORD TAB */}
-        {/* ============================================ */}
         {activeTab==='password' && (
           <div className="dash-card form-card">
             <h3>🔒 Change Password</h3>
@@ -868,9 +648,6 @@ function AgentDashboard() {
           </div>
         )}
 
-        {/* ============================================ */}
-        {/* AGENT MESSAGES TAB */}
-        {/* ============================================ */}
         {activeTab==='agent-messages' && (
           <div className="dash-card">
             <h3><i className="fas fa-envelope"></i> Messages</h3>
@@ -888,8 +665,7 @@ function AgentDashboard() {
                         <td>{m.message?.substring(0,40)}...</td>
                         <td>{m.time}</td>
                         <td>
-                          <button className="btn-sm" style={{background:'#0a1628',color:'white',border:'none',padding:'5px 10px',borderRadius:'3px',cursor:'pointer'}} 
-                            onClick={()=>handleReplyMessage(m.from)}>Reply</button>
+                          <button className="btn-sm" style={{background:'#0a1628',color:'white',border:'none',padding:'5px 10px',borderRadius:'3px',cursor:'pointer'}} onClick={()=>handleReplyMessage(m.from)}>Reply</button>
                         </td>
                       </tr>
                     ))
@@ -900,9 +676,6 @@ function AgentDashboard() {
           </div>
         )}
 
-        {/* ============================================ */}
-        {/* AGENT LIVE CHAT TAB */}
-        {/* ============================================ */}
         {activeTab==='agent-chat' && (
           <div className="dash-card" style={{display:'flex',flexDirection:'column',height:'60vh'}}>
             <h3><i className="fas fa-comments"></i> Live Chat</h3>
@@ -924,20 +697,14 @@ function AgentDashboard() {
               ))}
             </div>
             <div style={{display:'flex',gap:'10px'}}>
-              <input type="text" value={agentChatInput} onChange={e=>setAgentChatInput(e.target.value)} 
-                onKeyPress={e=>e.key==='Enter'&&handleAgentSendChat()} placeholder="Type message..." 
-                style={{flex:1,padding:'12px',border:'2px solid #e0e0e0',borderRadius:'8px'}}/>
-              <button onClick={handleAgentSendChat} className="btn-sm" 
-                style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'12px 20px',borderRadius:'8px',cursor:'pointer',fontWeight:'bold'}}>
+              <input type="text" value={agentChatInput} onChange={e=>setAgentChatInput(e.target.value)} onKeyPress={e=>e.key==='Enter'&&handleAgentSendChat()} placeholder="Type message..." style={{flex:1,padding:'12px',border:'2px solid #e0e0e0',borderRadius:'8px'}}/>
+              <button onClick={handleAgentSendChat} className="btn-sm" style={{background:'#d4a843',color:'#0a1628',border:'none',padding:'12px 20px',borderRadius:'8px',cursor:'pointer',fontWeight:'bold'}}>
                 Send
               </button>
             </div>
           </div>
         )}
 
-        {/* ============================================ */}
-        {/* AGENT CALLS TAB */}
-        {/* ============================================ */}
         {activeTab==='agent-calls' && (
           <div className="dash-card">
             <h3><i className="fas fa-phone"></i> Make a Call</h3>
@@ -960,9 +727,6 @@ function AgentDashboard() {
           </div>
         )}
 
-        {/* ============================================ */}
-        {/* AGENT NOTICE BOARD TAB */}
-        {/* ============================================ */}
         {activeTab==='agent-noticeboard' && (
           <div className="dash-card">
             <h3><i className="fas fa-clipboard-list"></i> Notice Board & Broadcasts</h3>
@@ -979,9 +743,6 @@ function AgentDashboard() {
           </div>
         )}
 
-        {/* ============================================ */}
-        {/* OTHER TABS PLACEHOLDER */}
-        {/* ============================================ */}
         {['earnings','payout','applications','disputes'].includes(activeTab) && (
           <div className="dash-card">
             <h3>{activeTab.charAt(0).toUpperCase()+activeTab.slice(1)}</h3>

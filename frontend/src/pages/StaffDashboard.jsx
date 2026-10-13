@@ -14,7 +14,6 @@ function StaffDashboard() {
   const [passwordForm, setPasswordForm] = useState({ current: '', newPass: '', confirm: '' });
   const [passwordMsg, setPasswordMsg] = useState('');
 
-  // Staff verification form
   const [verifyForm, setVerifyForm] = useState({
     full_name: '', date_of_birth: '', address: '', nin: '', bvn: '',
     bank_name: '', account_number: '',
@@ -26,10 +25,8 @@ function StaffDashboard() {
   const [verifyMsg, setVerifyMsg] = useState('');
   const [verifyLoading, setVerifyLoading] = useState(false);
 
-  // Profile
   const [profileData, setProfileData] = useState(null);
 
-  // Support data (demo)
   const [tickets, setTickets] = useState([
     { id: 'TKT-001', user: 'seeker1@example.com', subject: 'Payment not reflecting', type: 'payment_issue', priority: 'high', status: 'open', date: '2024-05-03' },
     { id: 'TKT-002', user: 'agent1@example.com', subject: 'Verification documents rejected', type: 'verification_help', priority: 'normal', status: 'assigned', date: '2024-05-02' },
@@ -47,7 +44,6 @@ function StaffDashboard() {
     { id: 1, from: 'seeker1@example.com', subject: 'How to apply for jobs', type: 'general', status: 'unread', date: '2024-05-03' },
   ]);
 
-  // Messages & Chat
   const [staffMessages, setStaffMessages] = useState([
     { id: 1, from: 'admin@jobconnect.com', subject: 'New Verification Assignment', message: 'You have 3 new agents to verify.', time: '1 hour ago', unread: true },
     { id: 2, from: 'agent1@example.com', subject: 'Document Upload Issue', message: 'I cannot upload my NIN document.', time: '3 hours ago', unread: false },
@@ -57,33 +53,35 @@ function StaffDashboard() {
   const [staffChatInput, setStaffChatInput] = useState('');
   const [selectedStaffContact, setSelectedStaffContact] = useState('');
 
-  // Calls
   const [staffCallTarget, setStaffCallTarget] = useState('');
   const [showStaffCall, setShowStaffCall] = useState(false);
 
-  // Notice Board
   const [staffNoticeBoard, setStaffNoticeBoard] = useState([
     { id: 1, title: 'Verification Targets', content: 'All pending verifications must be completed within 48 hours.', priority: 'urgent', date: '2024-06-01' },
     { id: 2, title: 'Team Meeting', content: 'Weekly team meeting every Monday at 9AM.', priority: 'normal', date: '2024-05-30' },
   ]);
 
   // ============================================
+  // HELPER: Unwrap nested API responses
+  // ============================================
+  const unwrap = (res) => res?.data?.data || res?.data || {};
+
+  // ============================================
   // INITIALIZATION
   // ============================================
   useEffect(() => {
     const userData = localStorage.getItem('user') || sessionStorage.getItem('user');
-    if (!userData) { 
-      navigate('/signin'); 
-      return; 
+    if (!userData) {
+      navigate('/signin');
+      return;
     }
-    
+
     const parsedUser = JSON.parse(userData);
     setUser(parsedUser);
-    
-    // Fetch profile
+
     if (parsedUser.id) {
       getUserProfile(parsedUser.id)
-        .then(res => setProfileData(res.data?.profile || null))
+        .then(res => setProfileData(unwrap(res).profile || null))
         .catch(err => console.log('Profile fetch error:', err))
         .finally(() => setLoading(false));
     } else {
@@ -94,63 +92,68 @@ function StaffDashboard() {
   // ============================================
   // HANDLERS
   // ============================================
-  const handleLogout = () => { 
-    localStorage.removeItem('user'); 
-    navigate('/signin'); 
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    sessionStorage.removeItem('user');
+    navigate('/signin');
   };
 
   const handlePasswordChange = () => {
     setPasswordMsg('');
-    if (!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm) { 
-      setPasswordMsg('❌ All fields required'); 
-      return; 
+    if (!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm) {
+      setPasswordMsg('❌ All fields required');
+      return;
     }
-    if (passwordForm.newPass.length < 6) { 
-      setPasswordMsg('❌ Min 6 characters'); 
-      return; 
+    if (passwordForm.newPass.length < 6) {
+      setPasswordMsg('❌ Min 6 characters');
+      return;
     }
-    if (passwordForm.newPass !== passwordForm.confirm) { 
-      setPasswordMsg('❌ Passwords do not match'); 
-      return; 
+    if (passwordForm.newPass !== passwordForm.confirm) {
+      setPasswordMsg('❌ Passwords do not match');
+      return;
     }
-    setPasswordMsg('✅ Password changed!'); 
+    setPasswordMsg('✅ Password changed!');
     setPasswordForm({ current: '', newPass: '', confirm: '' });
   };
 
   const handleVerifySubmit = async () => {
-    setVerifyLoading(true); 
+    setVerifyLoading(true);
     setVerifyMsg('');
     try {
-      await submitVerification({ 
-        user_id: user?.id, 
-        email: user?.email, 
-        user_type: 'staff', 
-        ...verifyForm 
+      await submitVerification({
+        user_id: user?.id,
+        email: user?.email,
+        user_type: 'staff',
+        ...verifyForm
       });
       setVerifyMsg('✅ Verification submitted!');
-    } catch { 
-      setVerifyMsg('❌ Failed to submit.'); 
+    } catch {
+      setVerifyMsg('❌ Failed to submit.');
     }
     setVerifyLoading(false);
   };
 
   const handleExportCSV = (data, filename) => {
+    if (!data || data.length === 0) {
+      alert('No data to export');
+      return;
+    }
     const csv = Object.keys(data[0]).join(',') + '\n' + data.map(r => Object.values(r).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' }); 
+    const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); 
-    a.download = filename; 
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
     a.click();
   };
 
   const handleStaffSendChat = () => {
     if (!staffChatInput.trim()) return;
-    setStaffChatMessages([...staffChatMessages, { 
-      id: Date.now(), 
-      sender: 'staff', 
-      text: staffChatInput, 
-      time: new Date().toLocaleTimeString(), 
-      isStaff: true 
+    setStaffChatMessages([...staffChatMessages, {
+      id: Date.now(),
+      sender: 'staff',
+      text: staffChatInput,
+      time: new Date().toLocaleTimeString(),
+      isStaff: true
     }]);
     setStaffChatInput('');
   };
@@ -161,9 +164,9 @@ function StaffDashboard() {
   };
 
   const handleStaffStartCall = () => {
-    if (!staffCallTarget) { 
-      alert('Select who to call'); 
-      return; 
+    if (!staffCallTarget) {
+      alert('Select who to call');
+      return;
     }
     setShowStaffCall(true);
     const roomUrl = `https://meet.jit.si/JobConnect-Staff-${Date.now()}`;
@@ -182,7 +185,7 @@ function StaffDashboard() {
   };
 
   // ============================================
-  // LOADING STATE
+  // LOADING
   // ============================================
   if (loading) {
     return (
@@ -195,12 +198,8 @@ function StaffDashboard() {
     );
   }
 
-  // ============================================
-  // MAIN RENDER
-  // ============================================
   return (
     <div className="dashboard">
-      {/* SIDEBAR */}
       <div className={`dashboard-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
           <div className="user-avatar">👨‍💼</div>
@@ -256,7 +255,6 @@ function StaffDashboard() {
         </nav>
       </div>
 
-      {/* MAIN CONTENT */}
       <div className={`dashboard-main ${sidebarCollapsed ? 'expanded' : ''}`}>
         <div className="dash-topbar">
           <div><button className="toggle-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>☰</button></div>
@@ -282,7 +280,6 @@ function StaffDashboard() {
           <div><h4>Welcome, {user?.email?.split('@')[0] || 'Staff'}!</h4><p>Customer Support & Verification Dashboard</p></div>
         </div>
 
-        {/* DASHBOARD TAB */}
         {activeTab==='dashboard' && (
           <div>
             <div className="stats-row">
@@ -294,7 +291,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* TICKETS TAB */}
         {activeTab==='tickets' && (
           <div className="dash-card">
             <h3>🎫 Support Tickets</h3>
@@ -315,7 +311,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* DISPUTES TAB */}
         {activeTab==='disputes' && (
           <div className="dash-card">
             <h3>⚖️ Disputes</h3>
@@ -335,7 +330,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* INQUIRIES TAB */}
         {activeTab==='inquiries' && (
           <div className="dash-card">
             <h3>📧 Inquiries</h3>
@@ -356,7 +350,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* PROFILE TAB */}
         {activeTab==='profile' && (
           <div className="dash-card form-card">
             <h3>👤 My Profile</h3>
@@ -373,7 +366,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* VERIFICATION TAB */}
         {activeTab==='verification' && (
           <div className="dash-card form-card">
             <h3>🛡️ Staff Verification</h3>
@@ -393,7 +385,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* PASSWORD TAB */}
         {activeTab==='password' && (
           <div className="dash-card form-card">
             <h3>🔒 Change Password</h3>
@@ -405,7 +396,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* STAFF MESSAGES */}
         {activeTab==='staff-messages' && (
           <div className="dash-card">
             <h3><i className="fas fa-envelope"></i> Messages</h3>
@@ -425,7 +415,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* STAFF CHAT */}
         {activeTab==='staff-chat' && (
           <div className="dash-card" style={{display:'flex',flexDirection:'column',height:'60vh'}}>
             <h3><i className="fas fa-comments"></i> Live Chat</h3>
@@ -455,7 +444,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* STAFF CALLS */}
         {activeTab==='staff-calls' && (
           <div className="dash-card">
             <h3><i className="fas fa-phone"></i> Make a Call</h3>
@@ -477,7 +465,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* STAFF NOTICE BOARD */}
         {activeTab==='staff-noticeboard' && (
           <div className="dash-card">
             <h3><i className="fas fa-clipboard-list"></i> Notice Board</h3>

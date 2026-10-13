@@ -17,7 +17,6 @@ function JobSeekerDashboard() {
   const [passwordForm, setPasswordForm] = useState({ current: '', newPass: '', confirm: '' });
   const [passwordMsg, setPasswordMsg] = useState('');
 
-  // Verification form
   const [verifyForm, setVerifyForm] = useState({
     full_name: '', date_of_birth: '', address: '', nin: '',
     next_of_kin_name: '', next_of_kin_phone: '', next_of_kin_address: '',
@@ -27,103 +26,92 @@ function JobSeekerDashboard() {
   const [verifyMsg, setVerifyMsg] = useState('');
   const [verifyLoading, setVerifyLoading] = useState(false);
 
-  // Profile data
   const [profileData, setProfileData] = useState(null);
 
-  // Agreements & Disputes
   const [agreements, setAgreements] = useState([]);
   const [disputeData, setDisputeData] = useState({ type: 'refund', what: '', where: '', when: '', why: '' });
   const [disputeSubmitted, setDisputeSubmitted] = useState(false);
   const [releasedCommission, setReleasedCommission] = useState({});
 
-  // Messages
-  const [seekerMessages, setSeekerMessages] = useState([
-    { id: 1, from: 'John Agent', subject: 'Interview Preparation', message: 'Prepare for your interview on Friday.', time: '2 hours ago', unread: true },
-    { id: 2, from: 'JobConnect Admin', subject: 'Verification Reminder', message: 'Complete your verification to access all features.', time: 'Yesterday', unread: true },
-  ]);
+  const [seekerMessages, setSeekerMessages] = useState([]);
 
-  // Chat
   const [seekerChatMessages, setSeekerChatMessages] = useState([]);
   const [seekerChatInput, setSeekerChatInput] = useState('');
   const [selectedSeekerContact, setSelectedSeekerContact] = useState('');
 
-  // Calls
   const [seekerCallTarget, setSeekerCallTarget] = useState('');
   const [showSeekerCall, setShowSeekerCall] = useState(false);
 
-  // Notice Board
-  const [seekerNoticeBoard, setSeekerNoticeBoard] = useState([
-    { id: 1, title: 'New Feature: Video Meetings', content: 'You can now make video calls directly from your dashboard.', priority: 'normal', date: '2024-06-01' },
-    { id: 2, title: 'Job Alert', content: 'New jobs posted in your area. Check the Find Jobs tab!', priority: 'high', date: '2024-05-30' },
-  ]);
+  const [seekerNoticeBoard, setSeekerNoticeBoard] = useState([]);
+
+  // ============================================
+  // HELPER: Unwrap nested API responses
+  // ============================================
+  const unwrap = (res) => res?.data?.data || res?.data || {};
 
   // ============================================
   // INITIALIZATION
   // ============================================
   useEffect(() => {
     const userData = localStorage.getItem('user') || sessionStorage.getItem('user');
-    if (!userData) { 
-      navigate('/signin'); 
-      return; 
+    if (!userData) {
+      navigate('/signin');
+      return;
     }
-    
+
     const parsedUser = JSON.parse(userData);
     setUser(parsedUser);
-    
-    // Fetch data
+
     const fetchData = async () => {
       try {
-        // Fetch jobs
         const jobsRes = await getJobs();
-        setJobs(jobsRes.data?.jobs || []);
-        
-        // Fetch user profile
+        setJobs(unwrap(jobsRes).jobs || []);
+
         if (parsedUser.id) {
           try {
             const profileRes = await getUserProfile(parsedUser.id);
-            setProfileData(profileRes.data?.profile || null);
+            setProfileData(unwrap(profileRes).profile || null);
           } catch (err) {
             console.log('Profile fetch error:', err);
           }
         }
-        
-        // Load agreements from localStorage
+
         setAgreements(JSON.parse(localStorage.getItem('agreements') || '[]'));
         setReleasedCommission(JSON.parse(localStorage.getItem('releasedCommissions') || '{}'));
-        
       } catch (error) {
         console.error('Data fetch error:', error);
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchData();
   }, []);
 
   // ============================================
   // HANDLERS
   // ============================================
-  const handleLogout = () => { 
-    localStorage.removeItem('user'); 
-    navigate('/signin'); 
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    sessionStorage.removeItem('user');
+    navigate('/signin');
   };
-  
+
   const formatNaira = (num) => '₦' + Number(num).toLocaleString();
 
   const handlePasswordChange = () => {
     setPasswordMsg('');
-    if (!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm) { 
-      setPasswordMsg('❌ All fields are required'); 
-      return; 
+    if (!passwordForm.current || !passwordForm.newPass || !passwordForm.confirm) {
+      setPasswordMsg('❌ All fields are required');
+      return;
     }
-    if (passwordForm.newPass.length < 6) { 
-      setPasswordMsg('❌ New password must be at least 6 characters'); 
-      return; 
+    if (passwordForm.newPass.length < 6) {
+      setPasswordMsg('❌ New password must be at least 6 characters');
+      return;
     }
-    if (passwordForm.newPass !== passwordForm.confirm) { 
-      setPasswordMsg('❌ Passwords do not match'); 
-      return; 
+    if (passwordForm.newPass !== passwordForm.confirm) {
+      setPasswordMsg('❌ Passwords do not match');
+      return;
     }
     setPasswordMsg('✅ Password changed successfully!');
     setPasswordForm({ current: '', newPass: '', confirm: '' });
@@ -131,18 +119,18 @@ function JobSeekerDashboard() {
   };
 
   const handleVerifySubmit = async () => {
-    setVerifyLoading(true); 
+    setVerifyLoading(true);
     setVerifyMsg('');
     try {
-      await submitVerification({ 
-        user_id: user?.id, 
-        email: user?.email, 
-        user_type: 'job_seeker', 
-        ...verifyForm 
+      await submitVerification({
+        user_id: user?.id,
+        email: user?.email,
+        user_type: 'job_seeker',
+        ...verifyForm
       });
       setVerifyMsg('✅ Verification submitted! Review takes 24-48 hours.');
-    } catch { 
-      setVerifyMsg('❌ Failed to submit. Please try again.'); 
+    } catch {
+      setVerifyMsg('❌ Failed to submit. Please try again.');
     }
     setVerifyLoading(false);
   };
@@ -161,12 +149,12 @@ function JobSeekerDashboard() {
 
   const handleDisputeSubmit = (key, type) => {
     if (type === 'refund') {
-      if (!disputeData.what || !disputeData.why) { 
-        alert('Fill all dispute details'); 
-        return; 
+      if (!disputeData.what || !disputeData.why) {
+        alert('Fill all dispute details');
+        return;
       }
       if (window.confirm('Submit refund request?')) {
-        const updatedAgreements = agreements.map((a, i) => 
+        const updatedAgreements = agreements.map((a, i) =>
           (`${a.jobId}-${i}` === key ? { ...a, status: 'disputed', disputeType: 'refund', ...disputeData } : a)
         );
         setAgreements(updatedAgreements);
@@ -176,7 +164,7 @@ function JobSeekerDashboard() {
       }
     } else {
       if (window.confirm('Keep commission for next job?')) {
-        const updatedAgreements = agreements.map((a, i) => 
+        const updatedAgreements = agreements.map((a, i) =>
           (`${a.jobId}-${i}` === key ? { ...a, status: 'carried_forward', disputeType: 'carry_forward' } : a)
         );
         setAgreements(updatedAgreements);
@@ -189,12 +177,12 @@ function JobSeekerDashboard() {
 
   const handleSeekerSendChat = () => {
     if (!seekerChatInput.trim()) return;
-    setSeekerChatMessages([...seekerChatMessages, { 
-      id: Date.now(), 
-      sender: 'seeker', 
-      text: seekerChatInput, 
-      time: new Date().toLocaleTimeString(), 
-      isSeeker: true 
+    setSeekerChatMessages([...seekerChatMessages, {
+      id: Date.now(),
+      sender: 'seeker',
+      text: seekerChatInput,
+      time: new Date().toLocaleTimeString(),
+      isSeeker: true
     }]);
     setSeekerChatInput('');
   };
@@ -205,9 +193,9 @@ function JobSeekerDashboard() {
   };
 
   const handleSeekerStartCall = () => {
-    if (!seekerCallTarget) { 
-      alert('Select who to call'); 
-      return; 
+    if (!seekerCallTarget) {
+      alert('Select who to call');
+      return;
     }
     setShowSeekerCall(true);
     const roomUrl = `https://meet.jit.si/JobConnect-Seeker-${Date.now()}`;
@@ -226,7 +214,7 @@ function JobSeekerDashboard() {
   };
 
   // ============================================
-  // LOADING STATE
+  // LOADING
   // ============================================
   if (loading) {
     return (
@@ -239,12 +227,8 @@ function JobSeekerDashboard() {
     );
   }
 
-  // ============================================
-  // MAIN RENDER
-  // ============================================
   return (
     <div className="dashboard">
-      {/* SIDEBAR */}
       <div className={`dashboard-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
           <div className="user-avatar">👩🏾‍💼</div>
@@ -310,7 +294,6 @@ function JobSeekerDashboard() {
         </nav>
       </div>
 
-      {/* MAIN CONTENT */}
       <div className={`dashboard-main ${sidebarCollapsed ? 'expanded' : ''}`}>
         <div className="dash-topbar">
           <div><button className="toggle-btn" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>☰</button></div>
@@ -347,7 +330,6 @@ function JobSeekerDashboard() {
           <i className="fas fa-search" style={{fontSize:'3rem',opacity:0.3}}></i>
         </div>
 
-        {/* DASHBOARD TAB */}
         {activeTab==='dashboard' && (
           <div>
             <div className="stats-row">
@@ -359,7 +341,6 @@ function JobSeekerDashboard() {
           </div>
         )}
 
-        {/* FIND JOBS TAB */}
         {activeTab==='jobs' && (
           <div className="dash-card">
             <div style={{display:'flex',justifyContent:'space-between',marginBottom:'15px'}}>
@@ -381,7 +362,6 @@ function JobSeekerDashboard() {
           </div>
         )}
 
-        {/* PROFILE TAB */}
         {activeTab==='profile' && (
           <div className="dash-card form-card">
             <h3>👤 My Profile</h3>
@@ -398,7 +378,6 @@ function JobSeekerDashboard() {
           </div>
         )}
 
-        {/* VERIFICATION TAB */}
         {activeTab==='verification' && (
           <div className="dash-card form-card">
             <h3>🛡️ Account Verification</h3>
@@ -420,7 +399,6 @@ function JobSeekerDashboard() {
           </div>
         )}
 
-        {/* PASSWORD TAB */}
         {activeTab==='password' && (
           <div className="dash-card form-card">
             <h3>🔒 Change Password</h3>
@@ -432,8 +410,7 @@ function JobSeekerDashboard() {
           </div>
         )}
 
-        {/* PLACEHOLDER FOR OTHER TABS */}
-        {['applied','release','dispute','agreements','payments','seeker-messages','seeker-chat','seeker-calls','seeker-noticeboard'].includes(activeTab) && 
+        {['applied','release','dispute','agreements','payments','seeker-messages','seeker-chat','seeker-calls','seeker-noticeboard'].includes(activeTab) &&
          activeTab!=='verification' && activeTab!=='password' && activeTab!=='dashboard' && activeTab!=='jobs' && activeTab!=='profile' && (
           <div className="dash-card">
             <h3>{activeTab.charAt(0).toUpperCase()+activeTab.slice(1).replace(/-/g, ' ')}</h3>
