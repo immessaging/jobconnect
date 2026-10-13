@@ -20,7 +20,7 @@ import Courses from './pages/Courses';
 import Privacy from './pages/Privacy';
 import CookieConsent from './components/CookieConsent';
 import logoImg from './assets/images/job_connect_logo.png';
-
+import Verification from './pages/Verification';
 // ============================================
 // PROTECTED ROUTE COMPONENT
 // ============================================
@@ -314,6 +314,11 @@ function App() {
                 padding: '100px 20px',
                 minHeight: '60vh'
               }}>
+                <Route path="/verify" element={
+  <ProtectedRoute>
+    <Verification />
+  </ProtectedRoute>
+} />
                 <div style={{ fontSize: '5rem', marginBottom: '20px' }}>🔍</div>
                 <h1>404 - Page Not Found</h1>
                 <p>The page you're looking for doesn't exist.</p>

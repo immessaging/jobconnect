@@ -12,7 +12,9 @@ import {
   getTestimonials,
   getAccessLogs,
   getActivityLogs,
-  getAuditLogs
+  getAuditLogs,
+  adminGetVerificationDocuments,
+  adminReviewDocument
 } from '../services/api';
 
 function AdminDashboard() {
@@ -35,6 +37,7 @@ function AdminDashboard() {
   const [passwordMsg, setPasswordMsg] = useState('');
   const [userStatuses, setUserStatuses] = useState({});
   const [pendingUsers, setPendingUsers] = useState([]);
+  const [verificationDocs, setVerificationDocs] = useState([]);
 
   // Admin role with granular detection
   const adminRole = user?.adminLevel || 'admin';
@@ -88,9 +91,6 @@ function AdminDashboard() {
   // ============================================
   // HELPER: Unwrap nested API responses
   // ============================================
-  // Backend returns: { data: { users: [...] }, success: true }
-  // Some endpoints return: { users: [...] }  (flat)
-  // This handles both shapes.
   const unwrap = (res) => res?.data?.data || res?.data || {};
 
   // ============================================
@@ -110,6 +110,7 @@ function AdminDashboard() {
     setUser(parsedUser);
     
     fetchAllDashboardData();
+    loadVerificationDocs();
   }, []);
 
   const fetchAllDashboardData = async () => {
@@ -161,6 +162,37 @@ function AdminDashboard() {
       setError('Failed to load dashboard data. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ============================================
+  // VERIFICATION DOCUMENTS
+  // ============================================
+  const loadVerificationDocs = async () => {
+    try {
+      const res = await adminGetVerificationDocuments('pending');
+      setVerificationDocs(unwrap(res).users || []);
+    } catch (err) {
+      console.error('Failed to load verification documents:', err);
+    }
+  };
+
+  const handleReviewDocument = async (docId, action) => {
+    let notes = '';
+    if (action === 'reject') {
+      const input = prompt('Reason for rejection (optional):');
+      if (input === null) return; // user cancelled
+      notes = input;
+    }
+    try {
+      await adminReviewDocument(docId, action, notes);
+      alert(`✅ Document ${action}d`);
+      loadVerificationDocs();
+      // Refresh pending users too (a fully-approved user drops off the list)
+      loadVerifications();
+    } catch (err) {
+      console.error(err);
+      alert('❌ Action failed');
     }
   };
 
@@ -292,6 +324,7 @@ function AdminDashboard() {
     activeJobs: jobs.filter(j => j.status === 'active').length,
     totalJobs: jobs.length, 
     pendingVerifications: pendingUsers.length,
+    pendingDocuments: verificationDocs.length,
     platformRevenue: '₦0', 
     totalTransactions: 0,
     totalAgents: users.filter(u => u.type === 'agent').length,
@@ -388,8 +421,10 @@ function AdminDashboard() {
           {canApproveVerifications && (
             <button className={`nav-item ${activeTab==='verifications'?'active':''}`} onClick={()=>setActiveTab('verifications')}>
               🛡️ <span className="sidebar-text">Verifications</span>
-              {stats.pendingVerifications > 0 && (
-                <span className="notification-badge">{stats.pendingVerifications}</span>
+              {stats.pendingDocuments + stats.pendingVerifications > 0 && (
+                <span className="notification-badge">
+                  {stats.pendingDocuments + stats.pendingVerifications}
+                </span>
               )}
             </button>
           )}
@@ -523,7 +558,7 @@ function AdminDashboard() {
               <div className="stat-box"><span className="stat-icon">👥</span><h3>{stats.totalUsers}</h3><p>Users</p></div>
               <div className="stat-box"><span className="stat-icon">💼</span><h3>{stats.activeJobs}</h3><p>Active Jobs</p></div>
               <div className="stat-box"><span className="stat-icon">🤝</span><h3>{stats.totalAgents}</h3><p>Agents</p></div>
-              <div className="stat-box"><span className="stat-icon">⏳</span><h3>{stats.pendingVerifications}</h3><p>Pending</p></div>
+              <div className="stat-box"><span className="stat-icon">⏳</span><h3>{stats.pendingDocuments + stats.pendingVerifications}</h3><p>Pending</p></div>
             </div>
             <div className="dash-card">
               <h3><i className="fas fa-bolt"></i> Quick Actions</h3>
@@ -761,35 +796,114 @@ function AdminDashboard() {
         )}
 
         {/* ============================================ */}
-        {/* VERIFICATIONS TAB */}
+        {/* VERIFICATIONS TAB — Document review + profile review */}
         {/* ============================================ */}
         {activeTab==='verifications' && canApproveVerifications && (
-          <div className="dash-card">
-            <h3>📋 Pending Verifications ({pendingUsers.length})</h3>
-            <div className="grid-2">
-              {pendingUsers.length===0 ? (
-                <p className="text-muted" style={{padding:'20px',textAlign:'center'}}>No pending verifications</p>
+          <div>
+            {/* SECTION A: Uploaded documents awaiting review */}
+            <div className="dash-card">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'15px'}}>
+                <h3>📄 Document Submissions ({verificationDocs.length})</h3>
+                <button className="btn-sm"
+                  style={{background:'#0a1628',color:'#d4a843',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}
+                  onClick={loadVerificationDocs}>
+                  🔄 Refresh
+                </button>
+              </div>
+
+              {verificationDocs.length === 0 ? (
+                <p className="text-muted" style={{padding:'20px',textAlign:'center'}}>
+                  No pending document submissions.
+                </p>
               ) : (
-                pendingUsers.map(u => (
-                  <div key={u.id} className="card" style={{borderLeft:'4px solid #ffc107',padding:'15px'}}>
-                    <h4>{u.full_name||u.email}</h4>
-                    <span className="badge badge-pending">{u.user_type}</span>
-                    {u.passport_photo && (
-                      <div style={{marginTop:'10px'}}>
-                        <img src={u.passport_photo} alt="Passport" style={{width:'100%',maxWidth:'200px',borderRadius:'8px'}}/>
+                <div className="grid-2">
+                  {verificationDocs.map(u => (
+                    <div key={u.user_id} className="card" style={{borderLeft:'4px solid #ffc107',padding:'15px'}}>
+                      <h4>{u.full_name || u.email}</h4>
+                      <p style={{margin:'4px 0',fontSize:'13px'}}>
+                        <span className="badge badge-pending">{u.user_type}</span>{' '}
+                        <span style={{color:'#666'}}>{u.email}</span>
+                      </p>
+                      {u.phone && <p style={{margin:0,fontSize:'13px'}}>📞 {u.phone}</p>}
+
+                      <div style={{marginTop:'12px'}}>
+                        <strong style={{fontSize:'13px'}}>Uploaded documents:</strong>
+                        <div style={{display:'flex',flexDirection:'column',gap:'10px',marginTop:'8px'}}>
+                          {u.documents.map(doc => (
+                            <div key={doc.id} style={{
+                              background:'#f9f9f9',
+                              padding:'10px',
+                              borderRadius:'8px',
+                              border:'1px solid #eee'
+                            }}>
+                              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'8px'}}>
+                                <a href={doc.document_url} target="_blank" rel="noreferrer"
+                                  style={{color:'#0a1628',fontWeight:600,textDecoration:'none',fontSize:'13px'}}>
+                                  📄 {doc.document_type.replace(/_/g,' ')}
+                                </a>
+                                <div style={{display:'flex',gap:'6px'}}>
+                                  <button className="btn-sm"
+                                    style={{background:'#28a745',color:'#fff',border:'none',padding:'6px 12px',borderRadius:'5px',cursor:'pointer',fontSize:'12px'}}
+                                    onClick={()=>handleReviewDocument(doc.id,'approve')}>
+                                    ✅ Approve
+                                  </button>
+                                  <button className="btn-sm"
+                                    style={{background:'#dc3545',color:'#fff',border:'none',padding:'6px 12px',borderRadius:'5px',cursor:'pointer',fontSize:'12px'}}
+                                    onClick={()=>handleReviewDocument(doc.id,'reject')}>
+                                    ❌ Reject
+                                  </button>
+                                </div>
+                              </div>
+                              {doc.user_notes && (
+                                <p style={{margin:'6px 0 0',fontSize:'12px',fontStyle:'italic',color:'#666'}}>
+                                  "{doc.user_notes}"
+                                </p>
+                              )}
+                              <small style={{color:'#999',fontSize:'11px'}}>
+                                Submitted: {new Date(doc.submitted_at).toLocaleString()}
+                              </small>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    )}
-                    <p>NIN: {u.nin||'N/A'} | BVN: {u.bvn||'N/A'}</p>
-                    <p>Bank: {u.bank_name||'N/A'} | Account: {u.account_number||'N/A'}</p>
-                    <p>Address: {u.address||'N/A'}</p>
-                    <div style={{display:'flex',gap:'10px',marginTop:'10px'}}>
-                      <button className="btn-sm" style={{background:'#28a745',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}
-                        onClick={()=>handleVerifyAction(u.id,'approve')}>✅ Approve</button>
-                      <button className="btn-sm" style={{background:'#dc3545',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}
-                        onClick={()=>handleVerifyAction(u.id,'reject')}>❌ Reject</button>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* SECTION B: Profile submissions (existing info-only verification) */}
+            <div className="dash-card" style={{marginTop:'20px'}}>
+              <h3>📋 Profile Verifications ({pendingUsers.length})</h3>
+              {pendingUsers.length===0 ? (
+                <p className="text-muted" style={{padding:'20px',textAlign:'center'}}>
+                  No pending profile verifications.
+                </p>
+              ) : (
+                <div className="grid-2">
+                  {pendingUsers.map(u => (
+                    <div key={u.id} className="card" style={{borderLeft:'4px solid #17a2b8',padding:'15px'}}>
+                      <h4>{u.full_name||u.email}</h4>
+                      <span className="badge badge-pending">{u.user_type}</span>
+                      {u.passport_photo && (
+                        <div style={{marginTop:'10px'}}>
+                          <img src={u.passport_photo} alt="Passport" style={{width:'100%',maxWidth:'200px',borderRadius:'8px'}}/>
+                        </div>
+                      )}
+                      <p style={{fontSize:'13px',margin:'6px 0'}}>NIN: {u.nin||'N/A'} | BVN: {u.bvn||'N/A'}</p>
+                      <p style={{fontSize:'13px',margin:'6px 0'}}>Bank: {u.bank_name||'N/A'} | Acct: {u.account_number||'N/A'}</p>
+                      <p style={{fontSize:'13px',margin:'6px 0'}}>Address: {u.address||'N/A'}</p>
+                      <div style={{display:'flex',gap:'10px',marginTop:'10px'}}>
+                        <button className="btn-sm"
+                          style={{background:'#28a745',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}
+                          onClick={()=>handleVerifyAction(u.id,'approve')}>✅ Approve</button>
+                        <button className="btn-sm"
+                          style={{background:'#dc3545',color:'white',border:'none',padding:'8px 16px',borderRadius:'5px',cursor:'pointer'}}
+                          onClick={()=>handleVerifyAction(u.id,'reject')}>❌ Reject</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

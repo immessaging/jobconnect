@@ -187,5 +187,21 @@ export const uploadToCloudinary = async (file) => {
   const data = await response.json();
   return data.secure_url;
 };
+// ============================================
+// VERIFICATION DOCUMENTS
+// ============================================
+export const uploadVerificationDocument = (data) =>
+  api.post('/api/verify/upload-document', data);
 
+export const getMyVerificationDocuments = (userId) =>
+  api.get(`/api/verify/my-documents/${userId}`);
+
+export const adminGetVerificationDocuments = (status = 'pending') =>
+  api.get(`/api/admin/verification-documents?status=${status}`);
+
+export const adminReviewDocument = (docId, action, reviewNotes = '') =>
+  api.post(`/api/admin/verification-documents/${docId}/review`, {
+    action,
+    review_notes: reviewNotes
+  });
 export default api;

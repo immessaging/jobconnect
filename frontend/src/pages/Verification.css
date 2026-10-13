@@ -1,0 +1,41 @@
+.verification-page {
+  min-height: 100vh;
+  background: #0a1628;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 40px 20px;
+}
+.verification-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 40px;
+  max-width: 580px;
+  width: 100%;
+  box-shadow: 0 10px 40px rgba(0,0,0,.3);
+}
+.verification-card h2 { margin-bottom: 8px; color: #0a1628; }
+.verification-card .subtitle { color: #666; margin-bottom: 24px; }
+.verification-card .form-group { margin-bottom: 18px; }
+.verification-card label { display: block; font-weight: 600; margin-bottom: 6px; color: #0a1628; }
+.verification-card select,
+.verification-card input[type=file],
+.verification-card textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.verification-card .auth-btn {
+  width: 100%;
+  padding: 14px;
+  background: #d4a843;
+  color: #0a1628;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+}
+.verification-card .auth-btn:disabled { opacity: .6; cursor: not-allowed; }

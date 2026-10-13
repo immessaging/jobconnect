@@ -531,7 +531,208 @@ def admin_get_audit_logs():
         return success_response(data={"logs": [{col: safe_str(row[i]) for i, col in enumerate(columns)} for row in cur.fetchall()]})
     except Exception as e: return error_response(str(e), 400)
     finally: cur.close(); conn.close()
+# =====================================================
+# VERIFICATION DOCUMENTS
+# =====================================================
 
+@app.route('/api/verify/upload-document', methods=['POST'])
+@limiter.limit("10 per hour")
+def upload_verification_document():
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        data = request.json
+        user_id       = data.get('user_id')
+        document_type = data.get('document_type')
+        document_url  = data.get('document_url')
+
+        if not user_id or not document_type or not document_url:
+            return error_response("user_id, document_type and document_url are required", 400)
+
+        allowed = ['utility_bill', 'bank_statement', 'voters_card', 'nin_slip']
+        if document_type not in allowed:
+            return error_response(f"document_type must be one of: {', '.join(allowed)}", 400)
+
+        cur = conn.cursor()
+
+        # Get user email for convenience
+        cur.execute("SELECT email FROM users WHERE id = %s", (user_id,))
+        row = cur.fetchone()
+        if not row:
+            return error_response("User not found", 404)
+        user_email = row[0]
+
+        cur.execute("""
+            INSERT INTO verification_documents
+              (user_id, user_email, document_type, document_url, document_name, user_notes, status)
+            VALUES (%s, %s, %s, %s, %s, %s, 'pending')
+            RETURNING id, submitted_at
+        """, (
+            user_id, user_email, document_type, document_url,
+            data.get('document_name'), data.get('user_notes')
+        ))
+        doc = cur.fetchone()
+
+        # Mark the user as pending so they show up in the admin queue
+        cur.execute("""
+            UPDATE users
+               SET verification_status = 'pending', updated_at = NOW()
+             WHERE id = %s AND (verification_status IS NULL OR verification_status NOT IN ('verified'))
+        """, (user_id,))
+
+        conn.commit()
+        return success_response(
+            data={"document_id": safe_str(doc[0]), "submitted_at": safe_str(doc[1])},
+            message="Document submitted for review",
+            status_code=201
+        )
+    except Exception as e:
+        if conn: conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        if 'cur' in locals(): cur.close()
+        conn.close()
+
+
+@app.route('/api/verify/my-documents/<user_id>', methods=['GET'])
+def get_my_verification_documents(user_id):
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, document_type, document_url, document_name,
+                   user_notes, status, review_notes, submitted_at, reviewed_at
+              FROM verification_documents
+             WHERE user_id = %s
+             ORDER BY submitted_at DESC
+        """, (user_id,))
+        docs = [{
+            "id": safe_str(r[0]),
+            "document_type": r[1],
+            "document_url": r[2],
+            "document_name": r[3],
+            "user_notes": r[4],
+            "status": r[5],
+            "review_notes": r[6],
+            "submitted_at": safe_str(r[7]),
+            "reviewed_at": safe_str(r[8])
+        } for r in cur.fetchall()]
+        return success_response(data={"documents": docs})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close(); conn.close()
+
+
+@app.route('/api/admin/verification-documents', methods=['GET'])
+@require_admin
+def admin_list_verification_documents():
+    """Returns pending docs grouped by user — what the admin reviews."""
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        status = request.args.get('status', 'pending')
+
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT d.id, d.user_id, d.user_email, d.document_type, d.document_url,
+                   d.document_name, d.user_notes, d.submitted_at,
+                   u.user_type, u.full_name, u.phone
+              FROM verification_documents d
+              JOIN users u ON u.id = d.user_id
+             WHERE d.status = %s
+             ORDER BY d.submitted_at DESC
+        """, (status,))
+
+        by_user = {}
+        for r in cur.fetchall():
+            uid = safe_str(r[1])
+            if uid not in by_user:
+                by_user[uid] = {
+                    "user_id": uid,
+                    "email": r[2],
+                    "user_type": r[8],
+                    "full_name": r[9],
+                    "phone": r[10],
+                    "documents": []
+                }
+            by_user[uid]["documents"].append({
+                "id": safe_str(r[0]),
+                "document_type": r[3],
+                "document_url": r[4],
+                "document_name": r[5],
+                "user_notes": r[6],
+                "submitted_at": safe_str(r[7])
+            })
+
+        users = list(by_user.values())
+        return success_response(data={"users": users, "count": len(users)})
+    except Exception as e:
+        return error_response(str(e), 400)
+    finally:
+        cur.close(); conn.close()
+
+
+@app.route('/api/admin/verification-documents/<doc_id>/review', methods=['POST'])
+@require_admin
+def admin_review_document(doc_id):
+    """Approve or reject a single document."""
+    conn = get_db_connection()
+    if not conn: return error_response("Database connection failed", 500)
+    try:
+        data   = request.json
+        action = data.get('action')  # 'approve' | 'reject'
+        if action not in ['approve', 'reject']:
+            return error_response("Action must be 'approve' or 'reject'", 400)
+
+        admin_data = json.loads(request.headers.get('X-User-Data', '{}'))
+        admin_email = admin_data.get('email', 'admin')
+
+        new_status = 'approved' if action == 'approve' else 'rejected'
+
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE verification_documents
+               SET status = %s, reviewed_by = %s, review_notes = %s, reviewed_at = NOW()
+             WHERE id = %s
+             RETURNING user_id
+        """, (new_status, admin_email, data.get('review_notes'), doc_id))
+        row = cur.fetchone()
+        if not row:
+            return error_response("Document not found", 404)
+        user_id = row[0]
+
+        # If ALL of this user's documents are approved → mark user verified
+        cur.execute("""
+            SELECT COUNT(*) FILTER (WHERE status = 'pending'),
+                   COUNT(*) FILTER (WHERE status = 'rejected'),
+                   COUNT(*) FILTER (WHERE status = 'approved')
+              FROM verification_documents
+             WHERE user_id = %s
+        """, (user_id,))
+        pending, rejected, approved = cur.fetchone()
+
+        if action == 'approve' and pending == 0 and rejected == 0 and approved > 0:
+            cur.execute("""
+                UPDATE users
+                   SET is_verified = TRUE, verification_status = 'verified', updated_at = NOW()
+                 WHERE id = %s
+            """, (user_id,))
+        elif action == 'reject':
+            cur.execute("""
+                UPDATE users
+                   SET verification_status = 'rejected', updated_at = NOW()
+                 WHERE id = %s
+            """, (user_id,))
+
+        conn.commit()
+        return success_response(message=f"Document {new_status}")
+    except Exception as e:
+        if conn: conn.rollback()
+        return error_response(str(e), 400)
+    finally:
+        cur.close(); conn.close()
 # ERROR HANDLERS
 @app.errorhandler(404)
 def not_found_error(error): return error_response("Endpoint not found", 404)
